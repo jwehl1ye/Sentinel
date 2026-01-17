@@ -96,41 +96,58 @@ export default function HomePage() {
   // Long press handlers for silent SOS
   const handlePressStart = (e) => {
     e.preventDefault()
-    if (!settings?.enable_silent_sos) {
-      return
-    }
-
     longPressStart.current = Date.now()
 
-    const updateProgress = () => {
-      const elapsed = Date.now() - longPressStart.current
-      const progress = Math.min(elapsed / 3000, 1) // 3 seconds
-      setLongPressProgress(progress)
+    // Only show long-press progress if silent SOS is enabled
+    if (settings?.enable_silent_sos) {
+      const updateProgress = () => {
+        if (!longPressStart.current) return
+        const elapsed = Date.now() - longPressStart.current
+        const progress = Math.min(elapsed / 3000, 1) // 3 seconds
+        setLongPressProgress(progress)
 
-      if (progress < 1) {
-        animationFrame.current = requestAnimationFrame(updateProgress)
-      } else {
-        // Trigger silent SOS
-        handleSilentSOS()
+        if (progress < 1) {
+          animationFrame.current = requestAnimationFrame(updateProgress)
+        } else {
+          // Trigger silent SOS
+          longPressStart.current = null
+          setLongPressProgress(0)
+          handleSilentSOS()
+        }
       }
-    }
 
-    animationFrame.current = requestAnimationFrame(updateProgress)
+      animationFrame.current = requestAnimationFrame(updateProgress)
+    }
   }
 
   const handlePressEnd = () => {
     if (animationFrame.current) {
       cancelAnimationFrame(animationFrame.current)
+      animationFrame.current = null
     }
 
-    const elapsed = Date.now() - (longPressStart.current || Date.now())
-    setLongPressProgress(0)
+    const startTime = longPressStart.current
     longPressStart.current = null
+    setLongPressProgress(0)
 
-    // If less than 3 seconds, normal SOS
-    if (elapsed < 3000) {
-      handleSOS()
+    // Only trigger SOS if we actually started a press
+    if (startTime) {
+      const elapsed = Date.now() - startTime
+      // If less than 3 seconds (or silent mode disabled), normal SOS
+      if (elapsed < 3000) {
+        handleSOS()
+      }
     }
+  }
+
+  const handlePressCancel = () => {
+    // Cancel without triggering - used for mouse leave
+    if (animationFrame.current) {
+      cancelAnimationFrame(animationFrame.current)
+      animationFrame.current = null
+    }
+    longPressStart.current = null
+    setLongPressProgress(0)
   }
 
   const handleCall911 = () => {
@@ -188,9 +205,10 @@ export default function HomePage() {
           className="sos-button"
           onMouseDown={handlePressStart}
           onMouseUp={handlePressEnd}
-          onMouseLeave={handlePressEnd}
+          onMouseLeave={handlePressCancel}
           onTouchStart={handlePressStart}
           onTouchEnd={handlePressEnd}
+          onTouchCancel={handlePressCancel}
         >
           <div className="sos-ring-1" />
           <div className="sos-ring-2" />
@@ -215,11 +233,6 @@ export default function HomePage() {
               {settings?.enable_silent_sos ? 'HOLD FOR SILENT MODE' : 'TAP TO START STREAMING'}
             </span>
           </div>
-        </button>
-
-        <button className="emergency-call-btn" onClick={handleCall911}>
-          <Phone size={20} />
-          <span>911</span>
         </button>
       </div>
 

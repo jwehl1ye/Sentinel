@@ -155,3 +155,100 @@
   color: var(--danger-primary);
 }
 
+.recording-preview {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recording-preview:hover {
+  background: var(--bg-secondary);
+}
+
+.recording-preview svg {
+  color: var(--danger-primary);
+}
+
+.tap-to-play {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+}
+
+/* Video Player Modal */
+.video-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: fade-in 0.2s ease;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.video-modal {
+  width: 100%;
+  max-width: 800px;
+  background: var(--bg-card);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.video-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.video-modal-header span {
+  font-family: var(--font-display);
+  letter-spacing: 1px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.close-btn:hover {
+  color: var(--text-primary);
+}
+
+.video-player {
+  width: 100%;
+  max-height: 60vh;
+  background: #000;
+}
+
+.video-modal-actions {
+  display: flex;
+  justify-content: center;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.video-modal-actions .btn {
+  min-width: 160px;
+}

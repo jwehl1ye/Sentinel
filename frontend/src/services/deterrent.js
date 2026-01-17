@@ -12,22 +12,22 @@ const createAudioContext = () => {
 
 export const startSiren = (type = 'police') => {
   const ctx = createAudioContext()
-  
+
   if (oscillator) stopSiren()
-  
+
   oscillator = ctx.createOscillator()
   gainNode = ctx.createGain()
-  
+
   oscillator.connect(gainNode)
   gainNode.connect(ctx.destination)
-  
+
   gainNode.gain.value = 0.3
-  
+
   if (type === 'police') {
     oscillator.type = 'sine'
     let freq = 700
     let direction = 1
-    
+
     sirenInterval = setInterval(() => {
       freq += direction * 20
       if (freq >= 1200) direction = -1
@@ -37,19 +37,19 @@ export const startSiren = (type = 'police') => {
   } else if (type === 'alarm') {
     oscillator.type = 'square'
     oscillator.frequency.value = 800
-    
+
     sirenInterval = setInterval(() => {
       gainNode.gain.value = gainNode.gain.value > 0.1 ? 0 : 0.3
     }, 200)
   } else if (type === 'horn') {
     oscillator.type = 'sawtooth'
     oscillator.frequency.value = 150
-    
+
     sirenInterval = setInterval(() => {
       gainNode.gain.value = gainNode.gain.value > 0.1 ? 0 : 0.4
     }, 500)
   }
-  
+
   oscillator.start()
 }
 
@@ -84,9 +84,9 @@ export const startStrobe = (speed = 'fast') => {
     transition: opacity 0.05s;
   `
   document.body.appendChild(overlay)
-  
+
   const interval = speed === 'fast' ? 100 : speed === 'medium' ? 200 : 400
-  
+
   strobeInterval = setInterval(() => {
     overlay.style.opacity = overlay.style.opacity === '0' ? '0.8' : '0'
   }, interval)
@@ -141,12 +141,13 @@ let warningInterval = null
 export const startDeterrent = () => {
   if (deterrentActive) return
   deterrentActive = true
-  
+
   startSiren('police')
-  startStrobe('fast')
+  // Strobe disabled - too disorienting
+  // startStrobe('fast')
   vibrate('continuous')
   speakWarning()
-  
+
   warningInterval = setInterval(() => {
     speakWarning()
   }, 15000)
@@ -155,12 +156,12 @@ export const startDeterrent = () => {
 export const stopDeterrent = () => {
   if (!deterrentActive) return
   deterrentActive = false
-  
+
   stopSiren()
   stopStrobe()
   stopVibrate()
   stopSpeaking()
-  
+
   if (warningInterval) {
     clearInterval(warningInterval)
     warningInterval = null

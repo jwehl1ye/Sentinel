@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { 
-  PhoneCall, Clock, Heart, AlertTriangle, Car, Home as HomeIcon, 
+import {
+  PhoneCall, Clock, Heart, AlertTriangle, Car, Home as HomeIcon,
   Briefcase, User, Timer, Plus, X, Check
 } from 'lucide-react'
 import './SafetyPage.css'
@@ -40,7 +40,7 @@ export default function SafetyPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const initialTab = searchParams.get('tab') || 'fakecall'
-  
+
   const [activeTab, setActiveTab] = useState(initialTab)
   const [fakeCallActive, setFakeCallActive] = useState(null)
   const [callAnswered, setCallAnswered] = useState(false)
@@ -127,7 +127,7 @@ export default function SafetyPage() {
       dueAt: new Date(Date.now() + preset.duration * 60000).toISOString(),
       escalationDelay: 5
     }
-    
+
     const updated = [...activeCheckIns, checkIn]
     setActiveCheckIns(updated)
     localStorage.setItem('checkIns', JSON.stringify(updated))
@@ -136,7 +136,7 @@ export default function SafetyPage() {
 
   const createCustomCheckIn = () => {
     if (!newCheckIn.name) return
-    
+
     const checkIn = {
       id: Date.now(),
       name: newCheckIn.name,
@@ -144,7 +144,7 @@ export default function SafetyPage() {
       dueAt: new Date(Date.now() + newCheckIn.duration * 60000).toISOString(),
       escalationDelay: newCheckIn.escalationDelay
     }
-    
+
     const updated = [...activeCheckIns, checkIn]
     setActiveCheckIns(updated)
     localStorage.setItem('checkIns', JSON.stringify(updated))
@@ -160,6 +160,10 @@ export default function SafetyPage() {
     if (updated.length === 0) {
       localStorage.removeItem('activeCheckIn')
     }
+
+    // Track for safety score
+    const count = parseInt(localStorage.getItem('checkInCount') || '0')
+    localStorage.setItem('checkInCount', (count + 1).toString())
   }
 
   const cancelCheckIn = (id) => {
@@ -254,8 +258,8 @@ export default function SafetyPage() {
           <h3 className="section-title">QUICK CALL SCENARIOS</h3>
           <div className="scenarios-grid">
             {fakeCallScenarios.map(scenario => (
-              <button 
-                key={scenario.id} 
+              <button
+                key={scenario.id}
                 className="scenario-card"
                 onClick={() => startFakeCall(scenario)}
               >
@@ -268,7 +272,7 @@ export default function SafetyPage() {
           <h3 className="section-title">SCHEDULE CALL</h3>
           <div className="schedule-options">
             {scheduleOptions.map(opt => (
-              <button 
+              <button
                 key={opt.value}
                 className={`schedule-btn ${scheduledCall?.delay === opt.value ? 'active' : ''}`}
                 onClick={() => scheduleCall(fakeCallScenarios[0], opt.value)}
@@ -325,8 +329,8 @@ export default function SafetyPage() {
           <h3 className="section-title">QUICK START</h3>
           <div className="presets-grid">
             {checkInPresets.map(preset => (
-              <button 
-                key={preset.name} 
+              <button
+                key={preset.name}
                 className="preset-card"
                 onClick={() => startCheckIn(preset)}
               >
@@ -346,7 +350,7 @@ export default function SafetyPage() {
             <div className="modal-overlay" onClick={() => setShowCreateCheckIn(false)}>
               <div className="modal" onClick={e => e.stopPropagation()}>
                 <h2 className="modal-title">CREATE CHECK-IN</h2>
-                
+
                 <div className="form-group">
                   <label className="label">Activity Name</label>
                   <input
@@ -367,7 +371,7 @@ export default function SafetyPage() {
                         className={`duration-btn ${newCheckIn.duration === d ? 'active' : ''}`}
                         onClick={() => setNewCheckIn({ ...newCheckIn, duration: d })}
                       >
-                        {d < 60 ? `${d}m` : `${d/60}h`}
+                        {d < 60 ? `${d}m` : `${d / 60}h`}
                       </button>
                     ))}
                   </div>

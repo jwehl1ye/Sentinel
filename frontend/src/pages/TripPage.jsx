@@ -145,6 +145,10 @@ export default function TripPage() {
         // Clear active trip
         localStorage.removeItem('activeTrip')
         setActiveTrip(null)
+
+        // Track for safety score
+        const count = parseInt(localStorage.getItem('tripCount') || '0')
+        localStorage.setItem('tripCount', (count + 1).toString())
     }
 
     const cancelTrip = () => {

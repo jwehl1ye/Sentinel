@@ -35,10 +35,41 @@ export default function StreamPage() {
   const chunksRef = useRef([])
   const timerRef = useRef(null)
   const countdownRef = useRef(null)
+  const recordingBlobRef = useRef(null)
+  const cleanupRef = useRef(null)
+  const isMountedRef = useRef(false)
+
+  // Store cleanup in ref so it always has latest values
+  useEffect(() => {
+    cleanupRef.current = cleanup
+  })
 
   useEffect(() => {
+    // Prevent double initialization from StrictMode
+    if (isMountedRef.current) {
+      console.log('Already mounted, skipping init')
+      return
+    }
+    isMountedRef.current = true
+
+    // Also cleanup when user closes tab or navigates away
+    const handleBeforeUnload = () => {
+      if (cleanupRef.current) {
+        cleanupRef.current()
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+
     initializeStream()
-    return () => cleanup()
+
+    return () => {
+      console.log('Component unmounting - running cleanup')
+      isMountedRef.current = false
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      if (cleanupRef.current) {
+        cleanupRef.current()
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -73,11 +104,47 @@ export default function StreamPage() {
   }, [phase])
 
   const cleanup = () => {
-    if (timerRef.current) clearInterval(timerRef.current)
-    if (countdownRef.current) clearInterval(countdownRef.current)
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop())
+    console.log('Cleanup called - stopping camera')
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
     }
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current)
+      countdownRef.current = null
+    }
+
+    // Stop the recorder first
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+      try {
+        recorderRef.current.stop()
+      } catch (e) {
+        console.log('Recorder already stopped')
+      }
+      recorderRef.current = null
+    }
+
+    // Stop all media tracks - this is what turns off the camera
+    if (streamRef.current) {
+      const tracks = streamRef.current.getTracks()
+      console.log('Stopping', tracks.length, 'tracks')
+      tracks.forEach(track => {
+        console.log('Stopping track:', track.kind, track.readyState)
+        track.stop()
+      })
+      streamRef.current = null
+    }
+
+    // Clear video element
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+
+    // Clear chunks
+    chunksRef.current = []
+    recordingBlobRef.current = null
+
     stopDeterrent()
   }
 
@@ -104,10 +171,40 @@ export default function StreamPage() {
         setNotifiedContacts(response.notified || [])
       }
 
-      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' })
+      // Check for supported mime types - prioritize more compatible options
+      const mimeTypes = [
+        'video/webm;codecs=vp8,opus',
+        'video/webm',
+        'video/mp4'
+      ]
+
+      let mimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || ''
+      console.log('Using mimeType:', mimeType)
+
+      const options = mimeType ? { mimeType } : {}
+      // Add bitrate if supported
+      options.videoBitsPerSecond = 2500000
+
+      const recorder = new MediaRecorder(stream, options)
+
+      // Store actual mimeType used
+      const recordingMimeType = recorder.mimeType
+
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data)
+        if (e.data && e.data.size > 0) {
+          chunksRef.current.push(e.data)
+        }
       }
+
+      recorder.onstop = () => {
+        console.log('Recorder stopped, chunks:', chunksRef.current.length)
+        // Create final blob when recording actually stops
+        if (chunksRef.current.length > 0) {
+          recordingBlobRef.current = new Blob(chunksRef.current, { type: recordingMimeType })
+          console.log('Created blob:', recordingBlobRef.current.size, 'bytes', 'type:', recordingMimeType)
+        }
+      }
+
       recorderRef.current = recorder
       recorder.start(1000)
 
@@ -120,6 +217,8 @@ export default function StreamPage() {
       }
     } catch (err) {
       console.error('Stream init error:', err)
+      // Clean up any partially initialized stream
+      cleanup()
       setError(err.name === 'NotAllowedError'
         ? 'Camera permission denied. Please allow camera access.'
         : err.message)
@@ -128,13 +227,25 @@ export default function StreamPage() {
   }
 
   const handleStop = () => {
-    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
-      recorderRef.current.stop()
-    }
-    if (timerRef.current) clearInterval(timerRef.current)
-    stopDeterrent()
-    setDeterrentActive(false)
-    setPhase('cancel-window')
+    return new Promise((resolve) => {
+      if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+        recorderRef.current.onstop = () => {
+          // Create final blob
+          if (chunksRef.current.length > 0) {
+            const mimeType = recorderRef.current?.mimeType || 'video/webm'
+            recordingBlobRef.current = new Blob(chunksRef.current, { type: mimeType.split(';')[0] })
+          }
+          resolve()
+        }
+        recorderRef.current.stop()
+      } else {
+        resolve()
+      }
+      if (timerRef.current) clearInterval(timerRef.current)
+      stopDeterrent()
+      setDeterrentActive(false)
+      setPhase('cancel-window')
+    })
   }
 
   const handleCancel = async () => {
@@ -156,8 +267,27 @@ export default function StreamPage() {
     setPhase('uploading')
 
     try {
-      if (!isPractice && chunksRef.current.length > 0) {
-        const blob = new Blob(chunksRef.current, { type: 'video/webm' })
+      // Get a final data chunk by requesting data
+      if (recorderRef.current && recorderRef.current.state === 'recording') {
+        recorderRef.current.requestData()
+      }
+
+      // Wait for the onstop event to create the blob
+      await new Promise(resolve => {
+        const checkBlob = () => {
+          if (recordingBlobRef.current) {
+            resolve()
+          } else {
+            setTimeout(checkBlob, 100)
+          }
+        }
+        // Give it a max of 3 seconds
+        setTimeout(resolve, 3000)
+        checkBlob()
+      })
+
+      const blob = recordingBlobRef.current
+      if (!isPractice && blob && blob.size > 0) {
         await api.uploadRecording(blob, {
           duration,
           latitude: location?.lat,
@@ -183,9 +313,17 @@ export default function StreamPage() {
 
       cleanup()
       setPhase('saved')
+
+      // Track for safety score
+      if (isPractice) {
+        const current = parseInt(localStorage.getItem('practiceRuns') || '0')
+        localStorage.setItem('practiceRuns', (current + 1).toString())
+      }
+
       setTimeout(() => navigate('/'), 3000)
     } catch (err) {
       console.error('Save error:', err)
+      cleanup()
       setError('Failed to save recording')
       setPhase('error')
     }
@@ -219,6 +357,11 @@ export default function StreamPage() {
     }
   }
 
+  const handleGoBack = () => {
+    cleanup()
+    navigate('/')
+  }
+
   if (phase === 'error') {
     return (
       <div className="stream-page stream-error">
@@ -228,7 +371,7 @@ export default function StreamPage() {
         {error.includes('permission') && (
           <p className="error-hint">On mobile, ensure HTTPS is enabled for camera access.</p>
         )}
-        <button className="btn btn-outline" onClick={() => navigate('/')}>
+        <button className="btn btn-outline" onClick={handleGoBack}>
           GO BACK
         </button>
       </div>
