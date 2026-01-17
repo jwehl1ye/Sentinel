@@ -256,7 +256,7 @@ export default function HomePage() {
         onClick={() => setShowCall911Modal(true)}
       >
         <Phone size={20} />
-        <span>Call 9111 for Me</span>
+        <span>Call 911 for Me</span>
       </button>
 
       <SafetyScore data={safetyData} />

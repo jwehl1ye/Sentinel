@@ -57,7 +57,7 @@ export default function SafetyPage() {
   const [showCustomEscalation, setShowCustomEscalation] = useState(false)
   const [customDuration, setCustomDuration] = useState({ minutes: '', seconds: '' })
   const [customEscalation, setCustomEscalation] = useState({ minutes: '', seconds: '' })
-  const [useAiVoice, setUseAiVoice] = useState(false)
+  const [useAiVoice, setUseAiVoice] = useState(true)
   // Contact selection for notifications
   const [contacts, setContacts] = useState([])
   const [selectedContacts, setSelectedContacts] = useState([])
@@ -424,7 +424,7 @@ export default function SafetyPage() {
             <span>Use fake calls to safely exit uncomfortable situations without confrontation.</span>
           </div>
 
-          <div className="settings-card mb-4">
+          <div className="settings-card mb-4" style={{ display: 'none' }}>
             <div className="setting-row">
               <div className="setting-info">
                 <h3>Conversational AI Agent</h3>
@@ -439,34 +439,19 @@ export default function SafetyPage() {
                 <span className="slider round"></span>
               </label>
             </div>
-
-            {useAiVoice && (
-              <div className="setting-input-row">
-                <label>Agent ID</label>
-                <input
-                  type="text"
-                  placeholder="Enter ElevenLabs Agent ID"
-                  value={agentId}
-                  onChange={(e) => setAgentId(e.target.value)}
-                  className="agent-id-input"
-                />
-                <p className="help-text">Default ID provided. Change only if using a custom agent.</p>
-              </div>
-            )}
           </div>
 
-          <h3 className="section-title">QUICK CALL SCENARIOS</h3>
-          <div className="scenarios-grid">
-            {fakeCallScenarios.map(scenario => (
-              <button
-                key={scenario.id}
-                className="scenario-card"
-                onClick={() => startFakeCall(scenario)}
-              >
-                <div className="scenario-icon">{scenario.emoji}</div>
-                <span>{scenario.name}</span>
-              </button>
-            ))}
+          <div className="fake-call-main-action">
+            <button
+              className="start-call-btn"
+              onClick={() => startFakeCall({ name: 'Incoming Call', number: 'Unknown', emoji: '📞' })}
+            >
+              <PhoneCall size={32} />
+              <span>START FAKE CALL</span>
+            </button>
+            <p className="fake-call-hint">
+              AI Agent is active. Speak naturally to guide the conversation.
+            </p>
           </div>
 
           <h3 className="section-title">SCHEDULE CALL</h3>

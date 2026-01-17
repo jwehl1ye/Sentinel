@@ -90,7 +90,7 @@ export default function Call911ForMeModal({ isOpen, onClose }) {
     } catch (err) {
       console.error('Call error:', err)
       const errorMsg = err.message || 'Failed to make the call'
-      
+
       if (errorMsg.includes('already in progress')) {
         setError('A call is already in progress. Please wait or reset.')
       } else {
@@ -116,7 +116,7 @@ export default function Call911ForMeModal({ isOpen, onClose }) {
     <div className="call911-modal-overlay" onClick={handleClose}>
       <div className="call911-modal" onClick={(e) => e.stopPropagation()}>
         <div className="call911-modal-header">
-          <h2>Call 9111 for Me</h2>
+          <h2>Call 911 for Me</h2>
           {callStatus !== 'active' && (
             <button className="close-btn" onClick={handleClose}>
               <X size={20} />
@@ -129,7 +129,7 @@ export default function Call911ForMeModal({ isOpen, onClose }) {
             <>
               <div className="call911-info">
                 <AlertCircle size={18} />
-                <span>This is a test call. AI will call <strong>+1 (437) 254-1201</strong> on your behalf. (9111 for testing)</span>
+                <span>This is a test call. AI will call <strong>+1 (437) 254-1201</strong> on your behalf. (911 for testing)</span>
               </div>
 
               <div className="call911-input-section">
@@ -162,7 +162,7 @@ export default function Call911ForMeModal({ isOpen, onClose }) {
                 ) : (
                   <>
                     <Phone size={18} />
-                    <span>Call 9111 Now</span>
+                    <span>Call 911 Now</span>
                   </>
                 )}
               </button>
@@ -175,7 +175,7 @@ export default function Call911ForMeModal({ isOpen, onClose }) {
                 <Phone size={48} />
               </div>
               <h3>Call in Progress</h3>
-              <p>The AI is calling 9111 on your behalf.</p>
+              <p>The AI is calling 911 on your behalf.</p>
               <p className="call911-situation">{situation}</p>
               <div className="call911-status">
                 <Loader size={20} className="spin" />
