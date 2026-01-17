@@ -1,13 +1,20 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Clock, Video, Shield, Download, Trash2, Eye, Share2, X, Play,
-  AlertTriangle, CheckCircle, Loader, FileText
+  AlertTriangle, CheckCircle, Loader, FileText, MessageCircle, Send, ChevronDown, ChevronUp
 } from 'lucide-react'
 import { format } from 'date-fns'
 import api from '../services/api'
 import './HistoryPage.css'
 
-const API_BASE = 'http://localhost:3001'
+const API_BASE = (() => {
+  const hostname = window.location.hostname
+  const port = window.location.port
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || port === '5173') {
+    return `http://${hostname}:3001`
+  }
+  return window.location.origin
+})()
 
 export default function HistoryPage() {
   const [recordings, setRecordings] = useState([])
@@ -196,12 +203,27 @@ function VideoModal({ recording, onClose, onDownload, getVideoUrl }) {
   const [aiEvents, setAiEvents] = useState([])
   const [aiSummary, setAiSummary] = useState(null)
   const [analysisStatus, setAnalysisStatus] = useState('loading')
+  const [analysisMessage, setAnalysisMessage] = useState('')
+  
+  // Gemini states
+  const [geminiSummary, setGeminiSummary] = useState(null)
+  const [rawSummary, setRawSummary] = useState(null)
+  const [showRaw, setShowRaw] = useState(false)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  
+  // Chat states
+  const [chatMessages, setChatMessages] = useState([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const [showChat, setShowChat] = useState(false)
+  const chatEndRef = useRef(null)
 
   useEffect(() => {
     const fetchAnalysis = async () => {
       try {
         const res = await api.getRecordingAnalysis(recording.id)
         setAnalysisStatus(res.status)
+        if (res.message) setAnalysisMessage(res.message)
         if (res.events) setAiEvents(res.events)
         if (res.summary) setAiSummary(res.summary)
       } catch (err) {
@@ -213,10 +235,11 @@ function VideoModal({ recording, onClose, onDownload, getVideoUrl }) {
 
     // Poll if processing
     const interval = setInterval(async () => {
-      if (analysisStatus === 'processing' || analysisStatus === 'pending' || analysisStatus === 'loading') {
+      if (['loading', 'processing', 'pending', 'indexing', 'uploading', 'validating', 'queued'].includes(analysisStatus)) {
         try {
           const res = await api.getRecordingAnalysis(recording.id)
           setAnalysisStatus(res.status)
+          if (res.message) setAnalysisMessage(res.message)
           if (res.events) setAiEvents(res.events)
           if (res.summary) setAiSummary(res.summary)
         } catch (err) {
@@ -227,6 +250,84 @@ function VideoModal({ recording, onClose, onDownload, getVideoUrl }) {
 
     return () => clearInterval(interval)
   }, [recording.id, analysisStatus])
+
+  // Fetch Gemini summary when analysis is ready
+  useEffect(() => {
+    if (analysisStatus === 'ready' && aiSummary && !geminiSummary && !summaryLoading) {
+      fetchGeminiSummary()
+    }
+  }, [analysisStatus, aiSummary])
+
+  const fetchGeminiSummary = async () => {
+    setSummaryLoading(true)
+    try {
+      const res = await api.getRecordingAnalysisSummary(recording.id)
+      if (res.summary) {
+        setGeminiSummary(res.summary)
+      }
+      if (res.raw) {
+        setRawSummary(res.raw)
+      }
+    } catch (err) {
+      console.error('Gemini summary error:', err)
+    }
+    setSummaryLoading(false)
+  }
+
+  // Scroll chat to bottom when new messages arrive
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMessages])
+
+  const handleSendMessage = async () => {
+    if (!chatInput.trim() || chatLoading) return
+
+    const userMessage = chatInput.trim()
+    setChatInput('')
+    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }])
+    setChatLoading(true)
+
+    try {
+      const res = await api.chatAboutRecording(recording.id, userMessage, chatMessages)
+      if (res.response) {
+        setChatMessages(prev => [...prev, { role: 'assistant', content: res.response }])
+      } else if (res.error) {
+        setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${res.message || res.error}` }])
+      }
+    } catch (err) {
+      console.error('Chat error:', err)
+      setChatMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, there was an error processing your question.' }])
+    }
+    setChatLoading(false)
+  }
+
+  const formatGeminiText = (text) => {
+    if (!text) return null
+    // Convert markdown-style formatting to JSX
+    return text.split('\n').map((line, i) => {
+      // Bold headers
+      if (line.startsWith('**') && line.endsWith('**')) {
+        return <h5 key={i} className="gemini-header">{line.replace(/\*\*/g, '')}</h5>
+      }
+      // Bold inline
+      if (line.includes('**')) {
+        const parts = line.split(/\*\*/)
+        return (
+          <p key={i}>
+            {parts.map((part, j) => j % 2 === 1 ? <strong key={j}>{part}</strong> : part)}
+          </p>
+        )
+      }
+      // Bullet points
+      if (line.startsWith('- ') || line.startsWith('• ')) {
+        return <li key={i}>{line.substring(2)}</li>
+      }
+      // Empty lines
+      if (!line.trim()) return <br key={i} />
+      // Regular text
+      return <p key={i}>{line}</p>
+    })
+  }
 
   return (
     <div className="video-modal-overlay" onClick={onClose}>
@@ -264,15 +365,20 @@ function VideoModal({ recording, onClose, onDownload, getVideoUrl }) {
           <div className="analysis-header">
             <h4>AI THREAT DETECTION</h4>
             <div className={`status-badge ${analysisStatus}`}>
-              {analysisStatus === 'loading' || analysisStatus === 'processing' || analysisStatus === 'pending' ? (
+              {['loading', 'processing', 'pending', 'indexing', 'uploading', 'validating', 'queued'].includes(analysisStatus) ? (
                 <>
                   <Loader size={14} className="spin" />
-                  ANALYZING...
+                  {analysisStatus === 'uploading' ? 'UPLOADING...' : analysisStatus === 'indexing' ? 'INDEXING...' : 'ANALYZING...'}
                 </>
               ) : analysisStatus === 'ready' ? (
                 <>
                   <CheckCircle size={14} />
                   COMPLETE
+                </>
+              ) : analysisStatus === 'unavailable' ? (
+                <>
+                  <AlertTriangle size={14} />
+                  NOT AVAILABLE
                 </>
               ) : (
                 <span>{analysisStatus.toUpperCase()}</span>
@@ -280,15 +386,52 @@ function VideoModal({ recording, onClose, onDownload, getVideoUrl }) {
             </div>
           </div>
 
-          {aiSummary && (
-            <div className="ai-summary">
-              <h5><FileText size={14} /> Video Summary</h5>
-              <p>{aiSummary}</p>
+          {/* Gemini Summary Section */}
+          {analysisStatus === 'ready' && (
+            <div className="ai-summary-container">
+              {summaryLoading ? (
+                <div className="summary-loading">
+                  <Loader size={16} className="spin" />
+                  <span>Generating safety analysis...</span>
+                </div>
+              ) : geminiSummary ? (
+                <>
+                  <div className="ai-summary scrollable">
+                    <h5><Shield size={14} /> Safety Analysis</h5>
+                    <div className="gemini-content">
+                      {formatGeminiText(geminiSummary)}
+                    </div>
+                  </div>
+                  
+                  <button 
+                    className="toggle-raw-btn"
+                    onClick={() => setShowRaw(!showRaw)}
+                  >
+                    {showRaw ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    {showRaw ? 'Hide' : 'Show'} Raw Analysis
+                  </button>
+                  
+                  {showRaw && rawSummary && (
+                    <div className="ai-summary raw scrollable">
+                      <h5><FileText size={14} /> Raw TwelveLabs Analysis</h5>
+                      <p>{rawSummary}</p>
+                    </div>
+                  )}
+                </>
+              ) : aiSummary && (
+                <div className="ai-summary scrollable">
+                  <h5><FileText size={14} /> Video Summary</h5>
+                  <p>{aiSummary}</p>
+                </div>
+              )}
             </div>
           )}
 
+          {/* Events List */}
           <div className="ai-events-list">
-            {aiEvents.length === 0 && analysisStatus === 'ready' ? (
+            {analysisStatus === 'unavailable' ? (
+              <p className="no-threats">{analysisMessage || 'AI threat detection is not available for this video.'}</p>
+            ) : aiEvents.length === 0 && analysisStatus === 'ready' ? (
               <p className="no-threats">No specific threats detected.</p>
             ) : (
               aiEvents.map((event, i) => (
@@ -301,6 +444,64 @@ function VideoModal({ recording, onClose, onDownload, getVideoUrl }) {
               ))
             )}
           </div>
+
+          {/* Chat Section */}
+          {analysisStatus === 'ready' && (
+            <div className="chat-section">
+              <button 
+                className="toggle-chat-btn"
+                onClick={() => setShowChat(!showChat)}
+              >
+                <MessageCircle size={16} />
+                {showChat ? 'Hide Chat' : 'Ask Questions About This Video'}
+              </button>
+              
+              {showChat && (
+                <div className="chat-container">
+                  <div className="chat-messages">
+                    {chatMessages.length === 0 && (
+                      <div className="chat-placeholder">
+                        Ask any question about this video and the AI will respond based on the analysis.
+                      </div>
+                    )}
+                    {chatMessages.map((msg, i) => (
+                      <div key={i} className={`chat-message ${msg.role}`}>
+                        <div className="message-content">
+                          {msg.role === 'assistant' ? formatGeminiText(msg.content) : msg.content}
+                        </div>
+                      </div>
+                    ))}
+                    {chatLoading && (
+                      <div className="chat-message assistant">
+                        <div className="message-content loading">
+                          <Loader size={14} className="spin" /> Thinking...
+                        </div>
+                      </div>
+                    )}
+                    <div ref={chatEndRef} />
+                  </div>
+                  
+                  <div className="chat-input-container">
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                      placeholder="Ask about the video..."
+                      disabled={chatLoading}
+                    />
+                    <button 
+                      onClick={handleSendMessage} 
+                      disabled={!chatInput.trim() || chatLoading}
+                      className="send-btn"
+                    >
+                      <Send size={18} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="video-modal-actions">

@@ -43,19 +43,20 @@ router.get('/nearby', authenticateToken, (req, res) => {
     const lngDelta = radiusKm / (111.32 * Math.cos(lat * Math.PI / 180))
 
     const incidents = db.prepare(`
-      SELECT 
-        i.*,
-        (6371 * acos(
-          cos(radians(?)) * cos(radians(latitude)) * 
-          cos(radians(longitude) - radians(?)) + 
-          sin(radians(?)) * sin(radians(latitude))
-        )) as distance
-      FROM incidents i
-      WHERE latitude BETWEEN ? AND ?
-        AND longitude BETWEEN ? AND ?
-        AND status IN ('active', 'investigating')
-        AND datetime(reported_at) > datetime('now', '-24 hours')
-      HAVING distance <= ?
+      SELECT * FROM (
+        SELECT 
+          i.*,
+          (6371 * acos(
+            cos(radians(?)) * cos(radians(latitude)) * 
+            cos(radians(longitude) - radians(?)) + 
+            sin(radians(?)) * sin(radians(latitude))
+          )) as distance
+        FROM incidents i
+        WHERE latitude BETWEEN ? AND ?
+          AND longitude BETWEEN ? AND ?
+          AND status IN ('active', 'investigating')
+          AND datetime(reported_at) > datetime('now', '-24 hours')
+      ) WHERE distance <= ?
       ORDER BY 
         CASE WHEN status = 'active' THEN 0 ELSE 1 END,
         distance ASC
@@ -337,18 +338,19 @@ function calculateSafetyScore(lat, lng, hour, dayOfWeek) {
 
   // Get recent active incidents
   const recentIncidents = db.prepare(`
-    SELECT type, severity,
-      (6371 * acos(
-        cos(radians(?)) * cos(radians(latitude)) * 
-        cos(radians(longitude) - radians(?)) + 
-        sin(radians(?)) * sin(radians(latitude))
-      )) as distance
-    FROM incidents
-    WHERE latitude BETWEEN ? AND ?
-      AND longitude BETWEEN ? AND ?
-      AND status = 'active'
-      AND datetime(reported_at) > datetime('now', '-12 hours')
-    HAVING distance <= ?
+    SELECT * FROM (
+      SELECT type, severity,
+        (6371 * acos(
+          cos(radians(?)) * cos(radians(latitude)) * 
+          cos(radians(longitude) - radians(?)) + 
+          sin(radians(?)) * sin(radians(latitude))
+        )) as distance
+      FROM incidents
+      WHERE latitude BETWEEN ? AND ?
+        AND longitude BETWEEN ? AND ?
+        AND status = 'active'
+        AND datetime(reported_at) > datetime('now', '-12 hours')
+    ) WHERE distance <= ?
   `).all(
     lat, lng, lat,
     lat - latDelta, lat + latDelta,

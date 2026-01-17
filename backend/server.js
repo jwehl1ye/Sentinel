@@ -11,6 +11,7 @@ import streamRoutes from './routes/stream.js'
 import locationRoutes from './routes/location.js'
 import medicalRoutes from './routes/medical.js'
 import incidentsRoutes from './routes/incidents.js'
+import emergencyRoutes from './routes/emergency.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -18,13 +19,15 @@ const app = express()
 const httpServer = createServer(app)
 const io = new Server(httpServer, {
   cors: {
-    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
-    methods: ['GET', 'POST']
+    origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://100.65.9.227:5173', /^http:\/\/192\.168\.\d+\.\d+:5173$/, /^http:\/\/10\.\d+\.\d+\.\d+:5173$/, /^http:\/\/100\.\d+\.\d+\.\d+:5173$/],
+    methods: ['GET', 'POST'],
+    credentials: true
   }
 })
 
 app.use(cors())
 app.use(express.json())
+app.use(express.urlencoded({ extended: true })) // Required for Twilio webhooks
 app.use('/uploads', express.static(join(__dirname, 'uploads')))
 
 app.use((req, res, next) => {
@@ -39,6 +42,7 @@ app.use('/api/stream', streamRoutes)
 app.use('/api/location', locationRoutes)
 app.use('/api/medical', medicalRoutes)
 app.use('/api/incidents', incidentsRoutes)
+app.use('/api/emergency', emergencyRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })

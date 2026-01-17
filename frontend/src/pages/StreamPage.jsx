@@ -3,11 +3,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Eye, StopCircle, Zap, MapPin, Upload, Users, Lock,
   AlertTriangle, CheckCircle, Shield, Loader, X, Volume2, VolumeX,
-  EyeOff
+  EyeOff, Phone
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import api from '../services/api'
 import { startDeterrent, stopDeterrent } from '../services/deterrent'
+import EmergencyCallModal from '../components/EmergencyCallModal'
 import './StreamPage.css'
 
 export default function StreamPage() {
@@ -28,6 +29,8 @@ export default function StreamPage() {
   const [videoReady, setVideoReady] = useState(false)
   const [isSilentMode, setIsSilentMode] = useState(isSilentFromUrl)
   const [fakeAppValue, setFakeAppValue] = useState('0')
+  const [showEmergencyCall, setShowEmergencyCall] = useState(false)
+  const [emergencyCallActive, setEmergencyCallActive] = useState(false)
 
   const videoRef = useRef(null)
   const streamRef = useRef(null)
@@ -161,8 +164,28 @@ export default function StreamPage() {
       }
 
       navigator.geolocation.getCurrentPosition(
-        pos => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => console.log('Location unavailable')
+        async (pos) => {
+          const lat = pos.coords.latitude
+          const lng = pos.coords.longitude
+          let address = `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+          
+          // Try to get address from reverse geocoding
+          try {
+            const response = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
+            )
+            const data = await response.json()
+            if (data.display_name) {
+              address = data.display_name
+            }
+          } catch (e) {
+            console.log('Reverse geocoding failed:', e)
+          }
+          
+          setLocation({ lat, lng, address })
+        },
+        () => console.log('Location unavailable'),
+        { enableHighAccuracy: true }
       )
 
       if (!isPractice) {
@@ -564,8 +587,24 @@ export default function StreamPage() {
             <StopCircle size={24} />
             <span>STOP RECORDING</span>
           </button>
+          <button 
+            className={`emergency-call-button ${emergencyCallActive ? 'active' : ''}`}
+            onClick={() => setShowEmergencyCall(true)}
+          >
+            <Phone size={20} />
+            <span>911</span>
+          </button>
         </div>
       )}
+
+      {/* Emergency Call Modal */}
+      <EmergencyCallModal
+        isOpen={showEmergencyCall}
+        onClose={() => setShowEmergencyCall(false)}
+        location={location}
+        videoRef={videoRef}
+        onCallStatusChange={(status) => setEmergencyCallActive(status === 'active')}
+      />
 
       {phase === 'initializing' && (
         <div className="initializing-overlay">

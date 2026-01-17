@@ -46,6 +46,7 @@ db.exec(`
     location_lat REAL,
     location_lng REAL,
     location_address TEXT,
+    twelvelabs_task_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     saved_at DATETIME,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE

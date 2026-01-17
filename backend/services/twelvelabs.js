@@ -1,11 +1,42 @@
 import { TwelveLabs } from 'twelvelabs-js'
 import fs from 'fs'
+import path from 'path'
+import { exec } from 'child_process'
+import { promisify } from 'util'
 
-const apiKey = process.env.TWELVELABS_KEY
-const client = apiKey ? new TwelveLabs({ apiKey }) : null
+const execAsync = promisify(exec)
+
+let client = null
+
+// Initialize client lazily to ensure env vars are loaded
+const getClient = () => {
+  if (!client) {
+    const apiKey = process.env.TWELVELABS_KEY
+    if (apiKey) {
+      client = new TwelveLabs({ apiKey })
+    }
+  }
+  return client
+}
+
+// Convert webm to mp4 to fix duration metadata issues
+const convertToMp4 = async (webmPath) => {
+  const mp4Path = webmPath.replace(/\.webm$/, '_converted.mp4')
+  
+  try {
+    console.log(`Converting ${webmPath} to MP4...`)
+    await execAsync(`ffmpeg -y -i "${webmPath}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${mp4Path}"`)
+    console.log(`Conversion complete: ${mp4Path}`)
+    return mp4Path
+  } catch (error) {
+    console.error('FFmpeg conversion error:', error.message)
+    return null
+  }
+}
 
 export const indexVideo = async (filePath, recordingId) => {
     try {
+        const client = getClient()
         if (!client) {
             console.log('TwelveLabs key missing, skipping indexing')
             return null
@@ -18,24 +49,43 @@ export const indexVideo = async (filePath, recordingId) => {
 
         console.log(`Indexing video for recording ${recordingId}...`)
 
-        const task = await client.task.create({
+        // Convert webm to mp4 for better compatibility with TwelveLabs
+        let videoPath = filePath
+        if (filePath.endsWith('.webm')) {
+            const mp4Path = await convertToMp4(filePath)
+            if (mp4Path && fs.existsSync(mp4Path)) {
+                videoPath = mp4Path
+            } else {
+                console.error('Failed to convert video, trying original...')
+            }
+        }
+
+        const task = await client.tasks.create({
             indexId,
-            file: fs.createReadStream(filePath),
+            videoFile: fs.createReadStream(videoPath),
             language: 'en'
         })
 
         console.log('TwelveLabs task created:', task.id)
+        
+        // Clean up converted file after upload (optional - keep for debugging)
+        // if (videoPath !== filePath && fs.existsSync(videoPath)) {
+        //     fs.unlinkSync(videoPath)
+        // }
+        
         return task.id
     } catch (error) {
         console.error('TwelveLabs indexing error:', error.message)
+        if (error.body) console.error('Error body:', JSON.stringify(error.body, null, 2))
         return null
     }
 }
 
 export const getTaskStatus = async (taskId) => {
     try {
+        const client = getClient()
         if (!client) return null
-        const task = await client.task.retrieve(taskId)
+        const task = await client.tasks.retrieve(taskId)
 
         // Map SDK status to our expected format
         // SDK usually returns status: 'pending', 'indexing', 'ready', 'failed'
@@ -51,6 +101,7 @@ export const getTaskStatus = async (taskId) => {
 
 export const searchVideo = async (indexId, query) => {
     try {
+        const client = getClient()
         if (!client) return null
 
         const results = await client.search.query({
@@ -61,7 +112,7 @@ export const searchVideo = async (indexId, query) => {
 
         // Map SDK results to our expected format (array of { start, end, score })
         return {
-            data: results.data.map(item => ({
+            data: (results.data || []).map(item => ({
                 start: item.start,
                 end: item.end,
                 score: item.score
@@ -75,14 +126,16 @@ export const searchVideo = async (indexId, query) => {
 
 export const generateSummary = async (videoId) => {
     try {
+        const client = getClient()
         if (!client) return null
 
-        const result = await client.generate.text({
+        const result = await client.summarize({
             videoId,
+            type: 'summary',
             prompt: "Generate a detailed description of what is happening in this video, focusing on any threats, weapons, or aggressive behavior. Provide a chronological summary."
         })
 
-        return { summary: result.data }
+        return { summary: result.summary || result.data }
     } catch (error) {
         console.error('TwelveLabs generate error:', error.message)
         return null

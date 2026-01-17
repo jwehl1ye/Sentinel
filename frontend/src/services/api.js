@@ -1,6 +1,15 @@
-const API_URL = window.location.hostname === 'localhost' 
-  ? 'http://localhost:3001/api'
-  : `${window.location.origin}/api`
+const API_URL = (() => {
+  const hostname = window.location.hostname
+  const port = window.location.port
+  
+  // If on localhost or development (port 5173), use port 3001 for backend
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || port === '5173') {
+    return `http://${hostname}:3001/api`
+  }
+  
+  // Otherwise, use same origin (for production)
+  return `${window.location.origin}/api`
+})()
 
 const getHeaders = () => {
   const token = localStorage.getItem('token')
@@ -82,6 +91,81 @@ const api = {
 
   getRecording: (id) =>
     fetch(`${API_URL}/recordings/${id}`, {
+      headers: getHeaders()
+    }).then(handleResponse),
+
+  getRecordingAnalysis: (id) =>
+    fetch(`${API_URL}/recordings/${id}/analysis`, {
+      headers: getHeaders()
+    }).then(handleResponse),
+
+  getRecordingAnalysisSummary: (id) =>
+    fetch(`${API_URL}/recordings/${id}/analysis/summary`, {
+      headers: getHeaders()
+    }).then(handleResponse),
+
+  chatAboutRecording: (id, question, history = []) =>
+    fetch(`${API_URL}/recordings/${id}/analysis/chat`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ question, history })
+    }).then(handleResponse),
+
+  // Emergency Call APIs
+  initiateEmergencyCall: (data) =>
+    fetch(`${API_URL}/emergency/call`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(data)
+    }).then(handleResponse),
+
+  getEmergencyCallStatus: (callId) =>
+    fetch(`${API_URL}/emergency/status/${callId}`, {
+      headers: getHeaders()
+    }).then(handleResponse),
+
+  endEmergencyCall: () =>
+    fetch(`${API_URL}/emergency/end`, {
+      method: 'POST',
+      headers: getHeaders()
+    }).then(handleResponse),
+
+  forceResetEmergencyCall: () =>
+    fetch(`${API_URL}/emergency/force-reset`, {
+      method: 'POST',
+      headers: getHeaders()
+    }).then(handleResponse),
+
+  getEmergencyAIResponse: (operatorMessage, callId, videoFrame = null) =>
+    fetch(`${API_URL}/emergency/ai-response`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ operatorMessage, callId, videoFrame })
+    }).then(handleResponse),
+
+  updateEmergencyContext: (data) =>
+    fetch(`${API_URL}/emergency/update-context`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(data)
+    }).then(handleResponse),
+
+  updateEmergencyVideo: (data) =>
+    fetch(`${API_URL}/emergency/update-video`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(data)
+    }).then(handleResponse),
+
+  analyzeEmergencySituation: (data) =>
+    fetch(`${API_URL}/emergency/analyze-situation`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(data)
+    }).then(handleResponse),
+
+  getEmergencyConfigStatus: () =>
+    fetch(`${API_URL}/emergency/config-status`, {
       headers: getHeaders()
     }).then(handleResponse),
 

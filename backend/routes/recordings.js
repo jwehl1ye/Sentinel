@@ -190,7 +190,7 @@ router.get('/:id/stream', (req, res) => {
 
     let decoded
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET || 'safestream-dev-secret-change-in-production')
+      decoded = jwt.verify(token, process.env.JWT_SECRET || 'safestream-secret-key-change-in-production')
     } catch (err) {
       return res.status(401).json({ error: 'Invalid token' })
     }
@@ -262,6 +262,107 @@ router.get('/:id/download', authenticateToken, (req, res) => {
 
 })
 
+// Get Gemini-summarized analysis
+router.get('/:id/analysis/summary', authenticateToken, async (req, res) => {
+  try {
+    const recording = db.prepare(
+      'SELECT * FROM recordings WHERE id = ? AND user_id = ?'
+    ).get(req.params.id, req.user.id)
+
+    if (!recording) {
+      return res.status(404).json({ error: 'Recording not found' })
+    }
+
+    // Check if we have raw analysis to summarize
+    if (!recording.ai_events) {
+      return res.json({ error: 'No analysis available to summarize' })
+    }
+
+    const aiData = JSON.parse(recording.ai_events)
+    if (!aiData.summary) {
+      return res.json({ error: 'No summary available' })
+    }
+
+    // Check if Gemini is configured
+    const { isConfigured, summarizeAnalysis } = await import('../services/gemini.js')
+    if (!isConfigured()) {
+      return res.json({ 
+        summary: null, 
+        raw: aiData.summary,
+        message: 'Gemini API not configured - showing raw analysis'
+      })
+    }
+
+    // Check if we already have a cached Gemini summary
+    if (aiData.geminiSummary) {
+      return res.json({ 
+        summary: aiData.geminiSummary, 
+        raw: aiData.summary 
+      })
+    }
+
+    // Generate new summary
+    const geminiSummary = await summarizeAnalysis(aiData.summary)
+    if (geminiSummary) {
+      // Cache the summary
+      aiData.geminiSummary = geminiSummary
+      db.prepare('UPDATE recordings SET ai_events = ? WHERE id = ?').run(JSON.stringify(aiData), recording.id)
+      return res.json({ summary: geminiSummary, raw: aiData.summary })
+    }
+
+    return res.json({ summary: null, raw: aiData.summary })
+  } catch (error) {
+    console.error('Summary error:', error)
+    res.status(500).json({ error: 'Failed to get summary' })
+  }
+})
+
+// Chat about video
+router.post('/:id/analysis/chat', authenticateToken, async (req, res) => {
+  try {
+    const { question, history } = req.body
+    
+    if (!question) {
+      return res.status(400).json({ error: 'Question is required' })
+    }
+
+    const recording = db.prepare(
+      'SELECT * FROM recordings WHERE id = ? AND user_id = ?'
+    ).get(req.params.id, req.user.id)
+
+    if (!recording) {
+      return res.status(404).json({ error: 'Recording not found' })
+    }
+
+    if (!recording.ai_events) {
+      return res.json({ error: 'No analysis available to chat about' })
+    }
+
+    const aiData = JSON.parse(recording.ai_events)
+    if (!aiData.summary) {
+      return res.json({ error: 'No video analysis available' })
+    }
+
+    const { isConfigured, chatAboutVideo } = await import('../services/gemini.js')
+    if (!isConfigured()) {
+      return res.json({ 
+        error: 'Gemini API not configured',
+        message: 'Chat feature requires Gemini API configuration'
+      })
+    }
+
+    const response = await chatAboutVideo(aiData.summary, question, history || [])
+    if (response) {
+      return res.json({ response })
+    }
+
+    return res.json({ error: 'Failed to generate response' })
+  } catch (error) {
+    console.error('Chat error:', error)
+    res.status(500).json({ error: 'Failed to process chat' })
+  }
+})
+
 router.get('/:id/analysis', authenticateToken, async (req, res) => {
   try {
     const recording = db.prepare(
@@ -272,6 +373,19 @@ router.get('/:id/analysis', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Recording not found' })
     }
 
+    // Check if TwelveLabs is configured
+    const hasApiKey = process.env.TWELVELABS_KEY
+    const hasIndexId = process.env.TWELVELABS_INDEX_ID
+
+    if (!hasApiKey || !hasIndexId) {
+      return res.json({ 
+        status: 'unavailable', 
+        events: [], 
+        summary: null,
+        message: 'AI analysis requires TwelveLabs API configuration'
+      })
+    }
+
     // If already analyzed, return cached results
     if (recording.ai_events && recording.ai_events !== '[]') {
       const events = JSON.parse(recording.ai_events)
@@ -280,6 +394,34 @@ router.get('/:id/analysis', authenticateToken, async (req, res) => {
         // Fall through to re-analyze/summarize
       } else {
         return res.json({ status: 'ready', events: events.events || events, summary: events.summary })
+      }
+    }
+
+    // If video hasn't been indexed yet but TwelveLabs is available, start indexing
+    if (!recording.twelvelabs_task_id && hasApiKey && hasIndexId) {
+      try {
+        const { indexVideo } = await import('../services/twelvelabs.js')
+        const taskId = await indexVideo(recording.file_path, recording.id)
+        if (taskId) {
+          db.prepare('UPDATE recordings SET twelvelabs_task_id = ? WHERE id = ?').run(taskId, recording.id)
+          return res.json({ status: 'indexing', message: 'Video is being analyzed. This may take a few minutes.' })
+        } else {
+          // Indexing failed (likely video format/duration issue)
+          return res.json({ 
+            status: 'unavailable', 
+            events: [], 
+            summary: null,
+            message: 'Video format not supported for AI analysis (must be at least 4 seconds)'
+          })
+        }
+      } catch (err) {
+        console.error('Failed to start indexing:', err)
+        return res.json({ 
+          status: 'unavailable', 
+          events: [], 
+          summary: null,
+          message: 'Could not analyze this video'
+        })
       }
     }
 
