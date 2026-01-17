@@ -1,0 +1,178 @@
+.contacts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.contact-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}
+
+.contact-icon {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+}
+
+.contact-icon.default {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+}
+
+.contact-icon.warning {
+  background: rgba(255, 196, 0, 0.15);
+  color: var(--warning-primary);
+}
+
+.contact-icon.info {
+  background: rgba(41, 121, 255, 0.15);
+  color: var(--accent-blue);
+}
+
+.contact-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.contact-name {
+  font-family: var(--font-display);
+  letter-spacing: 1px;
+}
+
+.contact-phone {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.contact-phone:hover {
+  color: var(--safe-primary);
+}
+
+.delete-btn {
+  color: var(--text-muted);
+  padding: 8px;
+  transition: color 0.2s;
+}
+
+.delete-btn:hover {
+  color: var(--danger-primary);
+}
+
+.section-title {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  font-weight: 400;
+}
+
+.quick-add-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.quick-add-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.quick-add-card span {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.quick-add-card.info {
+  color: var(--accent-blue);
+}
+
+.quick-add-card.info:hover {
+  border-color: var(--accent-blue);
+  background: rgba(41, 121, 255, 0.1);
+}
+
+.quick-add-card.warning {
+  color: var(--warning-primary);
+}
+
+.quick-add-card.warning:hover {
+  border-color: var(--warning-primary);
+  background: rgba(255, 196, 0, 0.1);
+}
+
+.quick-add-card.default {
+  color: var(--text-secondary);
+}
+
+.quick-add-card.default:hover {
+  border-color: var(--text-muted);
+  background: var(--bg-tertiary);
+}
+
+.type-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.type-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  transition: all 0.2s;
+}
+
+.type-btn.active.default {
+  border-color: var(--text-muted);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.type-btn.active.warning {
+  border-color: var(--warning-primary);
+  background: rgba(255, 196, 0, 0.15);
+  color: var(--warning-primary);
+}
+
+.type-btn.active.info {
+  border-color: var(--accent-blue);
+  background: rgba(41, 121, 255, 0.15);
+  color: var(--accent-blue);
+}
+
+.badge-default {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+

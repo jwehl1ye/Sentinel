@@ -1,0 +1,102 @@
+{
+    "name": "SafeStream",
+    "short_name": "SafeStream",
+    "description": "Personal safety app with live streaming, emergency alerts, and location sharing",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#0a0a0f",
+    "theme_color": "#ff1744",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "/icon-72.png",
+            "sizes": "72x72",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/icon-96.png",
+            "sizes": "96x96",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/icon-128.png",
+            "sizes": "128x128",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/icon-144.png",
+            "sizes": "144x144",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "Go Live (SOS)",
+            "short_name": "SOS",
+            "description": "Start emergency recording immediately",
+            "url": "/stream",
+            "icons": [
+                {
+                    "src": "/icon-sos.png",
+                    "sizes": "96x96"
+                }
+            ]
+        },
+        {
+            "name": "Silent SOS",
+            "short_name": "Silent",
+            "description": "Start silent recording",
+            "url": "/stream?silent=true",
+            "icons": [
+                {
+                    "src": "/icon-silent.png",
+                    "sizes": "96x96"
+                }
+            ]
+        },
+        {
+            "name": "Start Trip",
+            "short_name": "Trip",
+            "description": "Track a journey",
+            "url": "/trip",
+            "icons": [
+                {
+                    "src": "/icon-trip.png",
+                    "sizes": "96x96"
+                }
+            ]
+        }
+    ],
+    "share_target": {
+        "action": "/share",
+        "method": "POST",
+        "enctype": "multipart/form-data",
+        "params": {
+            "title": "title",
+            "text": "text",
+            "url": "url"
+        }
+    },
+    "categories": [
+        "safety",
+        "utilities"
+    ],
+    "screenshots": [],
+    "prefer_related_applications": false
+}

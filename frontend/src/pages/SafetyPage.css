@@ -1,0 +1,403 @@
+.safety-page .tab-selector {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.tab-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+  transition: all 0.2s ease;
+}
+
+.tab-btn.active {
+  background: var(--danger-primary);
+  border-color: var(--danger-primary);
+  color: white;
+}
+
+.tab-btn:hover:not(.active) {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.tab-content {
+  animation: slide-up 0.3s ease;
+}
+
+.section-title {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  margin: 20px 0 12px;
+  font-weight: 400;
+}
+
+.scenarios-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.scenario-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.scenario-card:hover {
+  border-color: var(--safe-primary);
+  background: rgba(0, 230, 118, 0.05);
+}
+
+.scenario-icon {
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.75rem;
+  background: var(--bg-tertiary);
+  border-radius: 50%;
+}
+
+.scenario-card span {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.schedule-options {
+  display: flex;
+  gap: 10px;
+}
+
+.schedule-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-family: var(--font-display);
+  letter-spacing: 1px;
+  transition: all 0.2s ease;
+}
+
+.schedule-btn.active {
+  border-color: var(--accent-blue);
+  background: rgba(41, 121, 255, 0.1);
+  color: var(--accent-blue);
+}
+
+.scheduled-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: rgba(41, 121, 255, 0.1);
+  border: 1px solid rgba(41, 121, 255, 0.3);
+  border-radius: 8px;
+  margin-top: 12px;
+  color: var(--accent-blue);
+  font-size: 0.85rem;
+}
+
+.scheduled-banner button {
+  color: var(--accent-blue);
+  padding: 4px;
+}
+
+.fake-call-screen {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(180deg, #1a1a2e 0%, #0a0a0f 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.incoming-call,
+.active-call {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 40px;
+  width: 100%;
+}
+
+.caller-avatar {
+  width: 100px;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  background: var(--bg-tertiary);
+  border-radius: 50%;
+  margin-bottom: 24px;
+}
+
+.caller-name {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+}
+
+.caller-number {
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.call-status {
+  color: var(--safe-primary);
+  font-size: 0.9rem;
+  margin-bottom: 60px;
+}
+
+.call-actions {
+  display: flex;
+  gap: 60px;
+  margin-bottom: 12px;
+}
+
+.call-btn {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  transition: transform 0.2s ease;
+}
+
+.call-btn:active {
+  transform: scale(0.9);
+}
+
+.call-btn.decline {
+  background: var(--danger-primary);
+}
+
+.call-btn.answer {
+  background: var(--safe-primary);
+}
+
+.call-labels {
+  display: flex;
+  gap: 60px;
+}
+
+.call-labels span {
+  width: 70px;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.call-timer {
+  font-family: var(--font-code);
+  font-size: 1.25rem;
+  color: var(--safe-primary);
+  margin-bottom: 40px;
+}
+
+.call-message {
+  padding: 20px;
+  background: var(--bg-card);
+  border-radius: 12px;
+  margin-bottom: 40px;
+  max-width: 300px;
+}
+
+.call-message p {
+  color: var(--text-secondary);
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.end-call-btn {
+  width: 100%;
+  max-width: 200px;
+  padding: 16px;
+  background: var(--danger-primary);
+  border-radius: 30px;
+  color: white;
+  font-family: var(--font-display);
+  letter-spacing: 2px;
+}
+
+.active-checkins {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.checkin-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--safe-glow);
+  border-left: 4px solid var(--safe-primary);
+  border-radius: 12px;
+}
+
+.checkin-card .checkin-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.checkin-card .checkin-name {
+  font-family: var(--font-display);
+  letter-spacing: 1px;
+}
+
+.checkin-card .checkin-timer {
+  font-family: var(--font-code);
+  font-size: 0.9rem;
+  color: var(--safe-primary);
+}
+
+.checkin-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-sm {
+  padding: 8px 12px;
+  font-size: 0.75rem;
+}
+
+.btn-icon {
+  padding: 8px;
+  color: var(--text-muted);
+  transition: color 0.2s ease;
+}
+
+.btn-icon:hover {
+  color: var(--danger-primary);
+}
+
+.presets-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.preset-card:hover {
+  border-color: var(--safe-primary);
+  background: rgba(0, 230, 118, 0.05);
+}
+
+.preset-emoji {
+  font-size: 1.5rem;
+}
+
+.preset-name {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.preset-duration {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  color: var(--safe-primary);
+}
+
+.custom-checkin-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 16px;
+  margin-top: 16px;
+  background: transparent;
+  border: 2px dashed var(--border-color);
+  border-radius: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  letter-spacing: 1px;
+  transition: all 0.2s ease;
+}
+
+.custom-checkin-btn:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.duration-options {
+  display: flex;
+  gap: 8px;
+}
+
+.duration-btn {
+  flex: 1;
+  padding: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-family: var(--font-display);
+  letter-spacing: 1px;
+  transition: all 0.2s ease;
+}
+
+.duration-btn.active {
+  background: var(--danger-primary);
+  border-color: var(--danger-primary);
+  color: white;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.modal-actions .btn {
+  flex: 1;
+}
+

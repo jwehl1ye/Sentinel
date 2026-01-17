@@ -1,0 +1,131 @@
+.auth-page {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.auth-container {
+  width: 100%;
+  max-width: 400px;
+  animation: slide-up 0.4s ease;
+}
+
+.auth-logo {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.auth-logo svg {
+  color: var(--danger-primary);
+  margin-bottom: 12px;
+  filter: drop-shadow(0 0 20px var(--danger-glow));
+}
+
+.auth-logo h1 {
+  font-family: var(--font-display);
+  font-size: 2.5rem;
+  letter-spacing: 6px;
+  font-weight: 400;
+  margin-bottom: 8px;
+}
+
+.auth-logo p {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.auth-toggle {
+  display: flex;
+  background: var(--bg-card);
+  border-radius: 8px;
+  padding: 4px;
+  margin-bottom: 24px;
+}
+
+.auth-toggle button {
+  flex: 1;
+  padding: 12px;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.auth-toggle button.active {
+  background: var(--danger-primary);
+  color: white;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.password-input {
+  position: relative;
+}
+
+.password-input .input {
+  padding-right: 48px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  padding: 4px;
+}
+
+.password-toggle:hover {
+  color: var(--text-primary);
+}
+
+.auth-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(255, 23, 68, 0.1);
+  border: 1px solid var(--border-danger);
+  border-radius: 8px;
+  color: var(--danger-secondary);
+  font-size: 0.85rem;
+}
+
+.auth-submit {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.auth-submit .spinner {
+  animation: spin 1s linear infinite;
+}
+
+.auth-switch {
+  text-align: center;
+  margin-top: 24px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.auth-switch button {
+  color: var(--danger-primary);
+  font-weight: 500;
+}
+
+.auth-switch button:hover {
+  text-decoration: underline;
+}
+
