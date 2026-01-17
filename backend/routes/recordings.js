@@ -429,6 +429,29 @@ router.get('/:id/analysis', authenticateToken, async (req, res) => {
       const { getTaskStatus, searchVideo, generateSummary } = await import('../services/twelvelabs.js')
       const status = await getTaskStatus(recording.twelvelabs_task_id)
 
+      // Handle failed/error statuses
+      if (!status) {
+        console.error(`Failed to get status for task ${recording.twelvelabs_task_id}`)
+        return res.json({ 
+          status: 'unavailable', 
+          events: [], 
+          summary: null,
+          message: 'Failed to check analysis status. Try again later.' 
+        })
+      }
+
+      if (status.status === 'failed' || status.status === 'error') {
+        console.error(`Task ${recording.twelvelabs_task_id} failed:`, status.error)
+        // Clear the failed task_id so user can retry
+        db.prepare('UPDATE recordings SET twelvelabs_task_id = NULL WHERE id = ?').run(recording.id)
+        return res.json({ 
+          status: 'unavailable', 
+          events: [], 
+          summary: null,
+          message: `Analysis failed: ${status.error || 'Unknown error'}. You can try viewing the video again to retry.` 
+        })
+      }
+
       if (status && status.status === 'ready') {
         const envIndexId = process.env.TWELVELABS_INDEX_ID
 
@@ -475,12 +498,24 @@ router.get('/:id/analysis', authenticateToken, async (req, res) => {
 
           return res.json({ status: 'ready', events, summary })
         }
+      } else if (status && (status.status === 'indexing' || status.status === 'pending')) {
+        // Still indexing/pending - return status for frontend polling
+        return res.json({ 
+          status: status.status, 
+          message: status.status === 'indexing' ? 'Video is being analyzed. This may take a few minutes.' : 'Video analysis is queued. Please wait.'
+        })
+      } else if (status && status.status === 'ready' && !status.video_id) {
+        // Status says ready but no video_id - might be transitioning
+        return res.json({ status: 'indexing', message: 'Finalizing analysis...' })
       } else if (status) {
-        return res.json({ status: status.status })
+        // Other status (unknown, etc.)
+        console.warn(`Unexpected task status: ${status.status} for task ${recording.twelvelabs_task_id}`)
+        return res.json({ status: status.status || 'pending', message: status.error || 'Processing video...' })
       }
     }
 
-    res.json({ status: 'pending' })
+    // No task_id and no analysis - should have been handled above, but fallback
+    res.json({ status: 'pending', message: 'Analysis will begin shortly...' })
   } catch (error) {
     console.error('Analysis error:', error)
     res.status(500).json({ error: 'Failed to get analysis' })

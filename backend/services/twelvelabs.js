@@ -84,18 +84,36 @@ export const indexVideo = async (filePath, recordingId) => {
 export const getTaskStatus = async (taskId) => {
     try {
         const client = getClient()
-        if (!client) return null
+        if (!client) {
+            console.error('TwelveLabs client not initialized')
+            return null
+        }
+        
         const task = await client.tasks.retrieve(taskId)
+        
+        if (!task) {
+            console.error(`Task ${taskId} not found`)
+            return { status: 'failed', error: 'Task not found' }
+        }
+
+        console.log(`Task ${taskId} status:`, task.status, task.videoId ? `video_id: ${task.videoId}` : '')
 
         // Map SDK status to our expected format
         // SDK usually returns status: 'pending', 'indexing', 'ready', 'failed'
         return {
-            status: task.status,
-            video_id: task.videoId // SDK usually provides this when ready
+            status: task.status || 'unknown',
+            video_id: task.videoId || task.video_id, // SDK may use either format
+            error: task.error || null
         }
     } catch (error) {
-        console.error('TwelveLabs status error:', error.message)
-        return null
+        console.error('TwelveLabs status error:', error.message, error.body || '')
+        
+        // If task not found, it might have failed or been deleted
+        if (error.statusCode === 404 || error.message.includes('not found')) {
+            return { status: 'failed', error: 'Task not found - may have failed' }
+        }
+        
+        return { status: 'error', error: error.message }
     }
 }
 
