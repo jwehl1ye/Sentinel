@@ -286,8 +286,8 @@ router.get('/:id/analysis/summary', authenticateToken, async (req, res) => {
     // Check if Gemini is configured
     const { isConfigured, summarizeAnalysis } = await import('../services/gemini.js')
     if (!isConfigured()) {
-      return res.json({ 
-        summary: null, 
+      return res.json({
+        summary: null,
         raw: aiData.summary,
         message: 'Gemini API not configured - showing raw analysis'
       })
@@ -295,9 +295,9 @@ router.get('/:id/analysis/summary', authenticateToken, async (req, res) => {
 
     // Check if we already have a cached Gemini summary
     if (aiData.geminiSummary) {
-      return res.json({ 
-        summary: aiData.geminiSummary, 
-        raw: aiData.summary 
+      return res.json({
+        summary: aiData.geminiSummary,
+        raw: aiData.summary
       })
     }
 
@@ -321,7 +321,7 @@ router.get('/:id/analysis/summary', authenticateToken, async (req, res) => {
 router.post('/:id/analysis/chat', authenticateToken, async (req, res) => {
   try {
     const { question, history } = req.body
-    
+
     if (!question) {
       return res.status(400).json({ error: 'Question is required' })
     }
@@ -345,7 +345,7 @@ router.post('/:id/analysis/chat', authenticateToken, async (req, res) => {
 
     const { isConfigured, chatAboutVideo } = await import('../services/gemini.js')
     if (!isConfigured()) {
-      return res.json({ 
+      return res.json({
         error: 'Gemini API not configured',
         message: 'Chat feature requires Gemini API configuration'
       })
@@ -378,9 +378,9 @@ router.get('/:id/analysis', authenticateToken, async (req, res) => {
     const hasIndexId = process.env.TWELVELABS_INDEX_ID
 
     if (!hasApiKey || !hasIndexId) {
-      return res.json({ 
-        status: 'unavailable', 
-        events: [], 
+      return res.json({
+        status: 'unavailable',
+        events: [],
         summary: null,
         message: 'AI analysis requires TwelveLabs API configuration'
       })
@@ -389,12 +389,7 @@ router.get('/:id/analysis', authenticateToken, async (req, res) => {
     // If already analyzed, return cached results
     if (recording.ai_events && recording.ai_events !== '[]') {
       const events = JSON.parse(recording.ai_events)
-      // Check if summary is missing (legacy analysis)
-      if (!events.summary && recording.twelvelabs_task_id) {
-        // Fall through to re-analyze/summarize
-      } else {
-        return res.json({ status: 'ready', events: events.events || events, summary: events.summary })
-      }
+      return res.json({ status: 'ready', events: events.events || events, summary: events.summary })
     }
 
     // If video hasn't been indexed yet but TwelveLabs is available, start indexing
@@ -407,18 +402,18 @@ router.get('/:id/analysis', authenticateToken, async (req, res) => {
           return res.json({ status: 'indexing', message: 'Video is being analyzed. This may take a few minutes.' })
         } else {
           // Indexing failed (likely video format/duration issue)
-          return res.json({ 
-            status: 'unavailable', 
-            events: [], 
+          return res.json({
+            status: 'unavailable',
+            events: [],
             summary: null,
             message: 'Video format not supported for AI analysis (must be at least 4 seconds)'
           })
         }
       } catch (err) {
         console.error('Failed to start indexing:', err)
-        return res.json({ 
-          status: 'unavailable', 
-          events: [], 
+        return res.json({
+          status: 'unavailable',
+          events: [],
           summary: null,
           message: 'Could not analyze this video'
         })
@@ -432,11 +427,11 @@ router.get('/:id/analysis', authenticateToken, async (req, res) => {
       // Handle failed/error statuses
       if (!status) {
         console.error(`Failed to get status for task ${recording.twelvelabs_task_id}`)
-        return res.json({ 
-          status: 'unavailable', 
-          events: [], 
+        return res.json({
+          status: 'unavailable',
+          events: [],
           summary: null,
-          message: 'Failed to check analysis status. Try again later.' 
+          message: 'Failed to check analysis status. Try again later.'
         })
       }
 
@@ -444,11 +439,11 @@ router.get('/:id/analysis', authenticateToken, async (req, res) => {
         console.error(`Task ${recording.twelvelabs_task_id} failed:`, status.error)
         // Clear the failed task_id so user can retry
         db.prepare('UPDATE recordings SET twelvelabs_task_id = NULL WHERE id = ?').run(recording.id)
-        return res.json({ 
-          status: 'unavailable', 
-          events: [], 
+        return res.json({
+          status: 'unavailable',
+          events: [],
           summary: null,
-          message: `Analysis failed: ${status.error || 'Unknown error'}. You can try viewing the video again to retry.` 
+          message: `Analysis failed: ${status.error || 'Unknown error'}. You can try viewing the video again to retry.`
         })
       }
 
@@ -456,22 +451,22 @@ router.get('/:id/analysis', authenticateToken, async (req, res) => {
         const envIndexId = process.env.TWELVELABS_INDEX_ID
 
         if (!envIndexId) {
-          return res.json({ 
-            status: 'unavailable', 
-            events: [], 
+          return res.json({
+            status: 'unavailable',
+            events: [],
             summary: null,
-            message: 'TwelveLabs Index ID not configured' 
+            message: 'TwelveLabs Index ID not configured'
           })
         }
 
         // Need video_id for generateSummary
         if (!status.video_id) {
           console.error(`Task ${recording.twelvelabs_task_id} is ready but no video_id found`)
-          return res.json({ 
-            status: 'unavailable', 
-            events: [], 
+          return res.json({
+            status: 'unavailable',
+            events: [],
             summary: null,
-            message: 'Video ID not found. Try again later.' 
+            message: 'Video ID not found. Try again later.'
           })
         }
 
@@ -514,17 +509,17 @@ router.get('/:id/analysis', authenticateToken, async (req, res) => {
           return res.json({ status: 'ready', events, summary })
         } catch (err) {
           console.error('Analysis processing error:', err.message, err.stack)
-          return res.json({ 
-            status: 'unavailable', 
-            events: [], 
+          return res.json({
+            status: 'unavailable',
+            events: [],
             summary: null,
-            message: `Analysis failed: ${err.message || 'Unknown error'}. You can try viewing the video again.` 
+            message: `Analysis failed: ${err.message || 'Unknown error'}. You can try viewing the video again.`
           })
         }
       } else if (status && (status.status === 'indexing' || status.status === 'pending')) {
         // Still indexing/pending - return status for frontend polling
-        return res.json({ 
-          status: status.status, 
+        return res.json({
+          status: status.status,
           message: status.status === 'indexing' ? 'Video is being analyzed. This may take a few minutes.' : 'Video analysis is queued. Please wait.'
         })
       } else if (status && status.status === 'ready' && !status.video_id) {

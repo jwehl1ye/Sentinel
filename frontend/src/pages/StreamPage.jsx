@@ -8,6 +8,7 @@ import {
 import { useAuth } from '../context/AuthContext'
 import api from '../services/api'
 import { startDeterrent, stopDeterrent } from '../services/deterrent'
+import { connectStreamSocket, startStreamSession, uploadChunk, endStreamSession, disconnectStreamSocket } from '../services/streamSocket'
 import EmergencyCallModal from '../components/EmergencyCallModal'
 import './StreamPage.css'
 
@@ -41,6 +42,11 @@ export default function StreamPage() {
   const recordingBlobRef = useRef(null)
   const cleanupRef = useRef(null)
   const isMountedRef = useRef(false)
+
+  // Cloud backup refs
+  const cloudSessionIdRef = useRef(null)
+  const cloudChunkCountRef = useRef(0)
+  const [cloudBackupActive, setCloudBackupActive] = useState(false)
 
   // Store cleanup in ref so it always has latest values
   useEffect(() => {
@@ -168,7 +174,7 @@ export default function StreamPage() {
           const lat = pos.coords.latitude
           const lng = pos.coords.longitude
           let address = `${lat.toFixed(6)}, ${lng.toFixed(6)}`
-          
+
           // Try to get address from reverse geocoding
           try {
             const response = await fetch(
@@ -181,7 +187,7 @@ export default function StreamPage() {
           } catch (e) {
             console.log('Reverse geocoding failed:', e)
           }
-          
+
           setLocation({ lat, lng, address })
         },
         () => console.log('Location unavailable'),
@@ -213,9 +219,21 @@ export default function StreamPage() {
       // Store actual mimeType used
       const recordingMimeType = recorder.mimeType
 
-      recorder.ondataavailable = (e) => {
+      recorder.ondataavailable = async (e) => {
         if (e.data && e.data.size > 0) {
           chunksRef.current.push(e.data)
+
+          // Upload chunk to cloud if session is active
+          if (cloudSessionIdRef.current && !isPractice) {
+            try {
+              const arrayBuffer = await e.data.arrayBuffer()
+              await uploadChunk(arrayBuffer)
+              cloudChunkCountRef.current++
+              console.log(`[CloudBackup] Uploaded chunk ${cloudChunkCountRef.current}`)
+            } catch (err) {
+              console.error('[CloudBackup] Chunk upload failed:', err)
+            }
+          }
         }
       }
 
@@ -229,7 +247,26 @@ export default function StreamPage() {
       }
 
       recorderRef.current = recorder
-      recorder.start(1000)
+
+      // Start cloud backup session before starting recorder
+      if (!isPractice) {
+        try {
+          connectStreamSocket()
+          const sessionId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+          cloudSessionIdRef.current = sessionId
+
+          // We need to get the user ID from auth context
+          const me = await api.getMe()
+          await startStreamSession(me.user.id, sessionId, location)
+          setCloudBackupActive(true)
+          console.log('[CloudBackup] Session started:', sessionId)
+        } catch (err) {
+          console.error('[CloudBackup] Failed to start cloud session:', err)
+          // Continue without cloud backup
+        }
+      }
+
+      recorder.start(2000) // 2-second chunks for cloud backup
 
       setPhase('recording')
 
@@ -276,6 +313,17 @@ export default function StreamPage() {
 
     if (!isPractice && streamId) {
       await api.endStream(streamId, true)
+    }
+
+    // End cloud backup session as cancelled
+    if (cloudSessionIdRef.current) {
+      try {
+        await endStreamSession(true) // cancelled = true
+        cloudSessionIdRef.current = null
+        setCloudBackupActive(false)
+      } catch (err) {
+        console.error('[CloudBackup] Failed to end cancelled session:', err)
+      }
     }
 
     chunksRef.current = []
@@ -331,6 +379,19 @@ export default function StreamPage() {
           if (latest) {
             await api.shareRecording(latest.id, contactIds)
           }
+        }
+      }
+
+      // End cloud backup session - the server will assemble the video
+      if (cloudSessionIdRef.current) {
+        try {
+          const cloudResult = await endStreamSession(false) // cancelled = false
+          console.log('[CloudBackup] Session finalized:', cloudResult)
+          cloudSessionIdRef.current = null
+          setCloudBackupActive(false)
+          disconnectStreamSocket()
+        } catch (err) {
+          console.error('[CloudBackup] Failed to finalize session:', err)
         }
       }
 
@@ -587,7 +648,7 @@ export default function StreamPage() {
             <StopCircle size={24} />
             <span>STOP RECORDING</span>
           </button>
-          <button 
+          <button
             className={`emergency-call-button ${emergencyCallActive ? 'active' : ''}`}
             onClick={() => setShowEmergencyCall(true)}
           >

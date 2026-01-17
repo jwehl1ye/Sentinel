@@ -55,7 +55,7 @@ export const chatAboutVideo = async (rawAnalysis, userQuestion, chatHistory = []
     // Build context from chat history
     let historyContext = ''
     if (chatHistory.length > 0) {
-      historyContext = '\n\nPREVIOUS CONVERSATION:\n' + 
+      historyContext = '\n\nPREVIOUS CONVERSATION:\n' +
         chatHistory.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n')
     }
 

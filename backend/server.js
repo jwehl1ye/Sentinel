@@ -1,4 +1,4 @@
-import 'dotenv/config' // Load environment variables from .env file
+import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import { createServer } from 'http'
@@ -126,6 +126,176 @@ io.on('connection', (socket) => {
         timestamp: new Date().toISOString()
       })
     })
+  })
+
+  // === CONTINUOUS CLOUD BACKUP HANDLERS ===
+
+  // Track active recording sessions per socket
+  socket.streamSession = null
+
+  socket.on('stream:start', async (data, callback) => {
+    try {
+      const { userId, sessionId, location } = data
+      console.log(`[CloudBackup] Stream started: session=${sessionId}, user=${userId}`)
+
+      // Store session info on socket for disconnect handling
+      socket.streamSession = {
+        sessionId,
+        userId,
+        location,
+        chunkCount: 0,
+        startedAt: new Date()
+      }
+
+      // Import chunk assembler to create session directory
+      const { getSessionDir } = await import('./services/chunkAssembler.js')
+      getSessionDir(sessionId)
+
+      if (callback) callback({ success: true, sessionId })
+    } catch (error) {
+      console.error('[CloudBackup] stream:start error:', error)
+      if (callback) callback({ success: false, error: error.message })
+    }
+  })
+
+  socket.on('stream:chunk', async (data, callback) => {
+    try {
+      if (!socket.streamSession) {
+        if (callback) callback({ success: false, error: 'No active session' })
+        return
+      }
+
+      const { chunkData } = data
+      const { sessionId } = socket.streamSession
+      const chunkIndex = socket.streamSession.chunkCount
+
+      // Save chunk to disk
+      const { saveChunk } = await import('./services/chunkAssembler.js')
+      saveChunk(sessionId, chunkIndex, Buffer.from(chunkData))
+
+      socket.streamSession.chunkCount++
+      socket.streamSession.lastChunkAt = new Date()
+
+      if (callback) callback({ success: true, chunkIndex })
+    } catch (error) {
+      console.error('[CloudBackup] stream:chunk error:', error)
+      if (callback) callback({ success: false, error: error.message })
+    }
+  })
+
+  socket.on('stream:end', async (data, callback) => {
+    try {
+      if (!socket.streamSession) {
+        if (callback) callback({ success: false, error: 'No active session' })
+        return
+      }
+
+      const { cancelled } = data || {}
+      const { sessionId, userId, location, chunkCount } = socket.streamSession
+
+      console.log(`[CloudBackup] Stream ended: session=${sessionId}, chunks=${chunkCount}, cancelled=${cancelled}`)
+
+      if (cancelled || chunkCount === 0) {
+        // User cancelled or no chunks - cleanup
+        const { cleanupChunks } = await import('./services/chunkAssembler.js')
+        cleanupChunks(sessionId)
+        socket.streamSession = null
+        if (callback) callback({ success: true, cancelled: true })
+        return
+      }
+
+      // Assemble chunks into final video
+      const { assembleChunks, cleanupChunks } = await import('./services/chunkAssembler.js')
+      const { v4: uuidv4 } = await import('uuid')
+      const { join } = await import('path')
+      const { fileURLToPath } = await import('url')
+      const { dirname } = await import('path')
+
+      const __dirname = dirname(fileURLToPath(import.meta.url))
+      const finalFilename = `${uuidv4()}-${Date.now()}.webm`
+      const finalPath = join(__dirname, 'uploads', finalFilename)
+
+      await assembleChunks(sessionId, finalPath)
+
+      // Create recording in database
+      const db = (await import('./database.js')).default
+      const { statSync } = await import('fs')
+      const fileStats = statSync(finalPath)
+
+      const result = db.prepare(`
+        INSERT INTO recordings (user_id, filename, original_name, file_path, file_size, duration, status, location_lat, location_lng, location_address, saved_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'saved', ?, ?, ?, CURRENT_TIMESTAMP)
+      `).run(
+        userId,
+        finalFilename,
+        'cloud-backup-recording.webm',
+        finalPath,
+        fileStats.size,
+        Math.floor((new Date() - socket.streamSession.startedAt) / 1000),
+        location?.lat || null,
+        location?.lng || null,
+        location?.address || null
+      )
+
+      const recordingId = result.lastInsertRowid
+
+      // Cleanup chunks
+      cleanupChunks(sessionId)
+      socket.streamSession = null
+
+      console.log(`[CloudBackup] Recording saved: id=${recordingId}`)
+      if (callback) callback({ success: true, recordingId })
+    } catch (error) {
+      console.error('[CloudBackup] stream:end error:', error)
+      if (callback) callback({ success: false, error: error.message })
+    }
+  })
+
+  socket.on('disconnect', async () => {
+    // Auto-save orphaned sessions
+    if (socket.streamSession && socket.streamSession.chunkCount > 0) {
+      console.log(`[CloudBackup] Socket disconnected - auto-saving orphaned session ${socket.streamSession.sessionId}`)
+
+      try {
+        const { sessionId, userId, location, chunkCount } = socket.streamSession
+
+        const { assembleChunks, cleanupChunks } = await import('./services/chunkAssembler.js')
+        const { v4: uuidv4 } = await import('uuid')
+        const { join } = await import('path')
+        const { fileURLToPath } = await import('url')
+        const { dirname } = await import('path')
+
+        const __dirname = dirname(fileURLToPath(import.meta.url))
+        const finalFilename = `${uuidv4()}-${Date.now()}-recovered.webm`
+        const finalPath = join(__dirname, 'uploads', finalFilename)
+
+        await assembleChunks(sessionId, finalPath)
+
+        const db = (await import('./database.js')).default
+        const { statSync } = await import('fs')
+        const fileStats = statSync(finalPath)
+
+        db.prepare(`
+          INSERT INTO recordings (user_id, filename, original_name, file_path, file_size, duration, status, location_lat, location_lng, location_address, saved_at)
+          VALUES (?, ?, ?, ?, ?, ?, 'recovered', ?, ?, ?, CURRENT_TIMESTAMP)
+        `).run(
+          userId,
+          finalFilename,
+          'recovered-recording.webm',
+          finalPath,
+          fileStats.size,
+          Math.floor((new Date() - socket.streamSession.startedAt) / 1000),
+          location?.lat || null,
+          location?.lng || null,
+          location?.address || null
+        )
+
+        cleanupChunks(sessionId)
+        console.log(`[CloudBackup] Orphaned recording recovered successfully`)
+      } catch (error) {
+        console.error('[CloudBackup] Failed to recover orphaned session:', error)
+      }
+    }
   })
 })
 
