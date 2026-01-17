@@ -455,7 +455,27 @@ router.get('/:id/analysis', authenticateToken, async (req, res) => {
       if (status && status.status === 'ready') {
         const envIndexId = process.env.TWELVELABS_INDEX_ID
 
-        if (envIndexId) {
+        if (!envIndexId) {
+          return res.json({ 
+            status: 'unavailable', 
+            events: [], 
+            summary: null,
+            message: 'TwelveLabs Index ID not configured' 
+          })
+        }
+
+        // Need video_id for generateSummary
+        if (!status.video_id) {
+          console.error(`Task ${recording.twelvelabs_task_id} is ready but no video_id found`)
+          return res.json({ 
+            status: 'unavailable', 
+            events: [], 
+            summary: null,
+            message: 'Video ID not found. Try again later.' 
+          })
+        }
+
+        try {
           // 1. Search for threats (Marengo)
           const keywords = ['gunshot', 'scream', 'fire', 'explosion', 'weapon', 'fighting', 'crash']
           const searchPromises = keywords.map(q => searchVideo(envIndexId, q))
@@ -480,12 +500,8 @@ router.get('/:id/analysis', authenticateToken, async (req, res) => {
           // 2. Generate Summary (Pegasus) - MUST use video_id, not task_id
           let summary = null
           try {
-            if (status.video_id) {
-              const summaryRes = await generateSummary(status.video_id)
-              summary = summaryRes ? summaryRes.summary : null
-            } else {
-              console.warn(`Task ${recording.twelvelabs_task_id} is ready but no video_id found`)
-            }
+            const summaryRes = await generateSummary(status.video_id)
+            summary = summaryRes ? summaryRes.summary : null
           } catch (err) {
             console.error('Summary generation failed:', err.message)
             // Continue without summary if generation fails
@@ -496,6 +512,14 @@ router.get('/:id/analysis', authenticateToken, async (req, res) => {
           db.prepare('UPDATE recordings SET ai_events = ? WHERE id = ?').run(JSON.stringify(aiData), recording.id)
 
           return res.json({ status: 'ready', events, summary })
+        } catch (err) {
+          console.error('Analysis processing error:', err.message, err.stack)
+          return res.json({ 
+            status: 'unavailable', 
+            events: [], 
+            summary: null,
+            message: `Analysis failed: ${err.message || 'Unknown error'}. You can try viewing the video again.` 
+          })
         }
       } else if (status && (status.status === 'indexing' || status.status === 'pending')) {
         // Still indexing/pending - return status for frontend polling
