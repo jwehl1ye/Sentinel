@@ -477,19 +477,18 @@ router.get('/:id/analysis', authenticateToken, async (req, res) => {
             }
           })
 
-          // 2. Generate Summary (Pegasus)
+          // 2. Generate Summary (Pegasus) - MUST use video_id, not task_id
           let summary = null
           try {
-            const summaryResult = await generateSummary(recording.twelvelabs_task_id) // Usually video_id is task_id in some contexts or we need video_id
-            // Wait, TwelveLabs search uses index_id + query. Generate uses video_id.
-            // The task_id from upload is usually the task ID. We need the VIDEO ID.
-            // The task status response usually contains the video_id.
             if (status.video_id) {
               const summaryRes = await generateSummary(status.video_id)
               summary = summaryRes ? summaryRes.summary : null
+            } else {
+              console.warn(`Task ${recording.twelvelabs_task_id} is ready but no video_id found`)
             }
           } catch (err) {
-            console.error('Summary generation failed:', err)
+            console.error('Summary generation failed:', err.message)
+            // Continue without summary if generation fails
           }
 
           // Save to DB
