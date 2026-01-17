@@ -10,6 +10,149 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const router = express.Router()
 
+// Helper to generate ElevenLabs TTS audio URL for Twilio <Play>
+const generateElevenLabsAudioUrl = (text, callId) => {
+  const serverUrl = process.env.SERVER_URL || `http://localhost:${process.env.PORT || 3001}`
+  // Twilio will call this endpoint to get the audio - text is passed in query param
+  const textHash = Buffer.from(text).toString('base64').replace(/[^a-zA-Z0-9]/g, '').substring(0, 50)
+  const encodedText = encodeURIComponent(text)
+  return `${serverUrl}/api/emergency/tts/${callId}/${textHash}?text=${encodedText}`
+}
+
+// Helper to generate TwiML for speech (Play with ElevenLabs or Say as fallback)
+const generateSpeechTwiML = async (text, callId) => {
+  const hasElevenLabs = await checkElevenLabsPermission()
+  if (hasElevenLabs) {
+    const audioUrl = generateElevenLabsAudioUrl(text, callId)
+    return `<Play>${audioUrl}</Play>`
+  } else {
+    // Fallback to Twilio Say
+    return `<Say voice="Google.en-US-Neural2-D">${text.replace(/[<>&'"]/g, '')}</Say>`
+  }
+}
+
+// Check if ElevenLabs has permission (cache the result)
+let elevenLabsHasPermission = null
+const checkElevenLabsPermission = async () => {
+  if (elevenLabsHasPermission !== null) return elevenLabsHasPermission
+  
+  const elevenLabsKey = process.env.ELEVENLABS_API_KEY
+  if (!elevenLabsKey) {
+    elevenLabsHasPermission = false
+    return false
+  }
+  
+  try {
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/EXAVITQu4vr4xnSDxMaL`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': elevenLabsKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        text: 'test',
+        model_id: 'eleven_turbo_v2_5'
+      })
+    })
+    
+    elevenLabsHasPermission = response.ok
+    if (!response.ok) {
+      const error = await response.text()
+      console.error('[TTS] ElevenLabs permission check failed:', error)
+    }
+  } catch (error) {
+    console.error('[TTS] ElevenLabs permission check error:', error.message)
+    elevenLabsHasPermission = false
+  }
+  
+  return elevenLabsHasPermission
+}
+
+// Store TTS cache temporarily (text -> audio buffer)
+const ttsCache = new Map()
+
+// Endpoint for Twilio to fetch ElevenLabs audio (no auth needed - Twilio calls this)
+router.get('/tts/:callId/:textHash', async (req, res) => {
+  try {
+    const { callId, textHash } = req.params
+    const { text } = req.query
+    
+    if (!text) {
+      return res.status(400).send('Text required')
+    }
+
+    const elevenLabsKey = process.env.ELEVENLABS_API_KEY
+    if (!elevenLabsKey) {
+      return res.status(503).send('ElevenLabs not configured')
+    }
+
+    // Check cache first
+    const cacheKey = `${callId}_${textHash}`
+    if (ttsCache.has(cacheKey)) {
+      const audio = ttsCache.get(cacheKey)
+      res.set('Content-Type', 'audio/mpeg')
+      res.set('Cache-Control', 'public, max-age=3600')
+      return res.send(audio)
+    }
+
+    // Generate audio using ElevenLabs (use professional voice)
+    const voiceId = 'EXAVITQu4vr4xnSDxMaL' // Sarah - calm and clear
+    const textToSpeak = decodeURIComponent(text)
+
+    console.log(`[TTS] Generating audio for callId: ${callId}, text length: ${textToSpeak.length}`)
+
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': elevenLabsKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        text: textToSpeak,
+        model_id: 'eleven_turbo_v2_5', // Fast model for real-time
+        voice_settings: {
+          stability: 0.6,
+          similarity_boost: 0.8,
+          style: 0.2,
+          use_speaker_boost: true
+        }
+      })
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`[TTS] ElevenLabs API error (${response.status}):`, errorText)
+      
+      // Return empty audio with proper headers - Twilio will skip it
+      // The calling code should use Twilio Say as fallback
+      res.set('Content-Type', 'audio/mpeg')
+      res.status(200) // Return 200 so Twilio doesn't think it's an error
+      return res.send(Buffer.alloc(0))
+    }
+
+    const audioBuffer = await response.arrayBuffer()
+    const audio = Buffer.from(audioBuffer)
+    
+    console.log(`[TTS] Generated audio: ${audio.length} bytes for callId: ${callId}`)
+    
+    // Cache for 5 minutes
+    ttsCache.set(cacheKey, audio)
+    setTimeout(() => ttsCache.delete(cacheKey), 300000)
+
+    res.set('Content-Type', 'audio/mpeg')
+    res.set('Cache-Control', 'public, max-age=3600')
+    res.send(audio)
+
+  } catch (error) {
+    console.error('[TTS] Generation error:', error.message, error.stack)
+    // Return empty audio with proper headers - Twilio will skip it
+    // The calling code should use Twilio Say as fallback
+    res.set('Content-Type', 'audio/mpeg')
+    res.status(200) // Return 200 so Twilio doesn't think it's an error
+    res.send(Buffer.alloc(0))
+  }
+})
+
 // Store active emergency calls
 const activeEmergencyCalls = new Map()
 
@@ -212,13 +355,18 @@ router.post('/call', authenticateToken, async (req, res) => {
         
         const userName = emergencyContext.userName || 'a person'
         const emergencyMessage = `This is a test call. I'm an AI calling on behalf of ${userName}, located at ${locationStr}. They are unable to speak and requested this call. How can I help?`
+        const gatherPrompt = "Please tell me your questions and I will try to help."
 
-        // Use Twilio with speech recognition for two-way conversation
-        // Using Google Neural2 voice for natural, professional sound
+        // Use ElevenLabs TTS if available, otherwise fallback to Twilio Say
+        const emergencySpeech = await generateSpeechTwiML(emergencyMessage, callId)
+        const gatherSpeech = await generateSpeechTwiML(gatherPrompt, callId)
+        
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-D">${emergencyMessage}</Say>
-  <Gather input="speech" timeout="8" speechTimeout="auto" speechModel="phone_call" language="en-US" hints="help, police, ambulance, fire, location, hurt, injured, yes, no, where, what, who, how many" action="${serverUrl}/api/emergency/gather/${callId}" method="POST"/>
+  ${emergencySpeech}
+  <Gather input="speech" timeout="8" speechTimeout="auto" speechModel="phone_call" language="en-US" hints="help, police, ambulance, fire, location, hurt, injured, yes, no, where, what, who, how many" action="${serverUrl}/api/emergency/gather/${callId}" method="POST">
+    ${gatherSpeech}
+  </Gather>
   <Redirect>${serverUrl}/api/emergency/gather/${callId}?timeout=true</Redirect>
 </Response>`
         
@@ -315,11 +463,12 @@ router.post('/gather/:callId', async (req, res) => {
     }
 
     if (!callData) {
-      // Call not found, just end gracefully
+      // Call not found, just end gracefully (using ElevenLabs TTS if available)
+      const lostContextSpeech = await generateSpeechTwiML("Call context lost. Please call back. Goodbye.", callId)
       res.type('text/xml')
       res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-D">Call context lost. Please call back. Goodbye.</Say>
+  ${lostContextSpeech}
   <Hangup/>
 </Response>`)
       return
@@ -328,15 +477,17 @@ router.post('/gather/:callId', async (req, res) => {
     const context = callData.context
     const serverUrl = process.env.SERVER_URL || `http://localhost:${process.env.PORT || 3001}`
 
-    // Handle timeout - just re-prompt
+    // Handle timeout - just re-prompt (using ElevenLabs TTS if available)
     if (isTimeout && !SpeechResult && !Digits) {
+      const stillHereSpeech = await generateSpeechTwiML("I'm still here. Go ahead.", callId)
+      const goodbyeSpeech = await generateSpeechTwiML("Goodbye.", callId)
       res.type('text/xml')
       res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Gather input="speech" timeout="8" speechTimeout="auto" speechModel="phone_call" language="en-US" hints="help, yes, no, police, ambulance" action="${serverUrl}/api/emergency/gather/${callId}" method="POST">
-    <Say voice="Google.en-US-Neural2-D">I'm still here. Go ahead.</Say>
+    ${stillHereSpeech}
   </Gather>
-  <Say voice="Google.en-US-Neural2-D">Goodbye.</Say>
+  ${goodbyeSpeech}
   <Hangup/>
 </Response>`)
       return
@@ -387,14 +538,29 @@ router.post('/gather/:callId', async (req, res) => {
         contextInfo += `, Situation: ${context.situation}`
       }
       
-      const prompt = `You are a 9111 AI assistant speaking on behalf of ${callerInfo} who cannot talk.
+      // Check if operator is ending the conversation
+      const endingPhrases = ['thank you', 'help is on the way', 'we are coming', 'assistance is coming', 'okay', 'ok', 'got it', 'understood', 'goodbye', 'bye']
+      const isEnding = endingPhrases.some(phrase => userInput.toLowerCase().includes(phrase))
+      
+      let prompt
+      if (isEnding) {
+        prompt = `You are a 9111 AI assistant. The operator just said: "${userInput}"
+
+This sounds like they are ending the conversation or confirming help is on the way.
+Respond with a brief acknowledgment and end politely. One sentence only.
+
+Example: "Thank you. I will let them know help is on the way."
+You:`
+      } else {
+        prompt = `You are a 9111 AI assistant speaking on behalf of ${callerInfo} who cannot talk.
 CONTEXT: ${contextInfo}
 
 Answer the operator's question using this context. If you don't know something, say so.
-One short sentence only.
+Be concise. One short sentence only.
 
 Operator: ${userInput}
 You:`
+      }
 
       const result = await model.generateContent(prompt)
       aiResponse = result.response.text().trim().split('\n')[0].substring(0, 200)
@@ -409,21 +575,23 @@ You:`
       timestamp: new Date().toISOString()
     })
 
-    // Send TwiML response with AI answer and continue gathering
+    // Send TwiML response with AI answer using ElevenLabs TTS if available
+    const aiResponseSpeech = await generateSpeechTwiML(aiResponse.replace(/[<>&'"]/g, ''), callId)
     res.type('text/xml')
     res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-D">${aiResponse.replace(/[<>&'"]/g, '')}</Say>
+  ${aiResponseSpeech}
   <Gather input="speech" timeout="8" speechTimeout="auto" speechModel="phone_call" language="en-US" hints="help, police, ambulance, yes, no, where, what, who, how many" action="${serverUrl}/api/emergency/gather/${callId}" method="POST"/>
   <Redirect>${serverUrl}/api/emergency/gather/${callId}?timeout=true</Redirect>
 </Response>`)
 
   } catch (error) {
     console.error('Gather handler error:', error)
+    const errorSpeech = await generateSpeechTwiML("I encountered an error. Emergency logged. Goodbye.", callId)
     res.type('text/xml')
     res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-D">I encountered an error. Emergency logged. Goodbye.</Say>
+  ${errorSpeech}
   <Hangup/>
 </Response>`)
   }
@@ -552,7 +720,23 @@ router.post('/ai-response', authenticateToken, async (req, res) => {
       .map(t => `${t.role === 'operator' ? '9111 Operator' : 'AI Assistant'}: ${t.content}`)
       .join('\n')
 
-    let prompt = `You are an AI emergency assistant on a 9111 call, speaking on behalf of someone who cannot speak (they may be in danger, injured, or hiding).
+    // Check if operator is ending the conversation
+    const endingPhrases = ['thank you', 'help is on the way', 'we are coming', 'assistance is coming', 'okay', 'ok', 'got it', 'understood', 'goodbye', 'bye', 'will send help', 'help coming']
+    const isEnding = endingPhrases.some(phrase => operatorMessage.toLowerCase().includes(phrase))
+    
+    let prompt
+    if (isEnding) {
+      prompt = `You are an AI emergency assistant on a 9111 call.
+The operator just said: "${operatorMessage}"
+
+This sounds like they are ending the conversation or confirming help is on the way.
+Respond with a brief, professional acknowledgment and end the conversation politely.
+One sentence only.
+
+Example: "Thank you. I will let the caller know help is on the way."
+You:`
+    } else {
+      prompt = `You are an AI emergency assistant on a 9111 call, speaking on behalf of someone who cannot speak (they may be in danger, injured, or hiding).
 
 EMERGENCY CONTEXT:
 - Caller Name: ${context.userName}
@@ -570,11 +754,12 @@ INSTRUCTIONS:
 - Prioritize providing location and nature of emergency
 - Answer the operator's questions directly and helpfully
 - If you see something new in the video, report it
-- Keep responses brief (1-3 sentences max)
+- Keep responses brief (1-2 sentences max)
 - This is a TEST CALL - if asked, confirm it's a test
 - If you need more information, say you'll try to get it from the video feed
 
 Respond as the AI assistant speaking to the 9111 operator:`
+    }
 
     // If we have a video frame, analyze it too
     let parts = [{ text: prompt }]
@@ -920,17 +1105,23 @@ router.post('/call-safety-contacts', authenticateToken, async (req, res) => {
       try {
         const callId = `safety_${Date.now()}_${userId}_${contact.id}`
         
-        // Build message for this contact
+        // Build message for this contact (using ElevenLabs TTS if available)
         const message = `Hello, this is an AI assistant calling on behalf of ${user.name || 'someone'}. 
 ${reason}. 
 ${user.name || 'The person'} is located at ${locationStr}.
 ${additionalInfo ? `Additional information: ${additionalInfo}` : ''}
 I can answer any questions you have. How can I help?`
 
+        const messageSpeech = await generateSpeechTwiML(message, callId)
+        const gatherPrompt = "Please tell me your questions and I will try to help."
+        const gatherSpeech = await generateSpeechTwiML(gatherPrompt, callId)
+        
         const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-D">${message}</Say>
-  <Gather input="speech" timeout="8" speechTimeout="auto" speechModel="phone_call" language="en-US" hints="help, yes, no, where, what, when, how, location, okay" action="${serverUrl}/api/emergency/gather-safety/${callId}" method="POST"/>
+  ${messageSpeech}
+  <Gather input="speech" timeout="8" speechTimeout="auto" speechModel="phone_call" language="en-US" hints="help, yes, no, where, what, when, how, location, okay" action="${serverUrl}/api/emergency/gather-safety/${callId}" method="POST">
+    ${gatherSpeech}
+  </Gather>
   <Redirect>${serverUrl}/api/emergency/gather-safety/${callId}?timeout=true</Redirect>
 </Response>`
 
@@ -1006,10 +1197,11 @@ router.post('/gather-safety/:callId', async (req, res) => {
     const callData = activeSafetyContactCalls.get(callId)
 
     if (!callData) {
+      const lostContextSpeech = await generateSpeechTwiML("I've lost the call context. Thank you for your time. Goodbye.", callId)
       res.type('text/xml')
       res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-D">I've lost the call context. Thank you for your time. Goodbye.</Say>
+  ${lostContextSpeech}
   <Hangup/>
 </Response>`)
       return
@@ -1018,15 +1210,17 @@ router.post('/gather-safety/:callId', async (req, res) => {
     const context = callData.context
     const serverUrl = process.env.SERVER_URL || `http://localhost:${process.env.PORT || 3001}`
 
-    // Handle timeout
+    // Handle timeout (using ElevenLabs TTS if available)
     if (isTimeout && !SpeechResult && !Digits) {
+      const stillHereSpeech = await generateSpeechTwiML("I'm still here if you need anything.", callId)
+      const goodbyeSpeech = await generateSpeechTwiML("Thank you for your time. Goodbye.", callId)
       res.type('text/xml')
       res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Gather input="speech" timeout="8" speechTimeout="auto" speechModel="phone_call" language="en-US" hints="yes, no, location, help" action="${serverUrl}/api/emergency/gather-safety/${callId}" method="POST">
-    <Say voice="Google.en-US-Neural2-D">I'm still here if you need anything.</Say>
+    ${stillHereSpeech}
   </Gather>
-  <Say voice="Google.en-US-Neural2-D">Thank you for your time. Goodbye.</Say>
+  ${goodbyeSpeech}
   <Hangup/>
 </Response>`)
       return
@@ -1055,15 +1249,31 @@ router.post('/gather-safety/:callId', async (req, res) => {
         }
       })
 
-      const prompt = `You are an AI assistant calling a safety contact about ${context.userName}.
+      // Check if contact is ending the conversation
+      const endingPhrases = ['thank you', 'got it', 'okay', 'ok', 'understood', 'will help', 'on my way', 'goodbye', 'bye']
+      const isEnding = endingPhrases.some(phrase => userInput.toLowerCase().includes(phrase))
+      
+      let prompt
+      if (isEnding) {
+        prompt = `You are an AI assistant calling ${context.contactName} about ${context.userName}'s safety.
+The contact said: "${userInput}"
+
+This sounds like they are ending the conversation or confirming they understand.
+Respond with a brief acknowledgment and end politely. One sentence only.
+
+Example: "Thank you for your help. I'll keep you updated if needed."
+You:`
+      } else {
+        prompt = `You are an AI assistant calling a safety contact about ${context.userName}.
 CONTEXT: ${context.contextInfo}
 
 This is ${context.contactName}, a safety contact for ${context.userName}.
 The contact asks: "${userInput}"
 
-Answer helpfully using the context. One short sentence only.
+Answer helpfully using the context. Be concise. One short sentence only.
 
 You:`
+      }
 
       const result = await model.generateContent(prompt)
       aiResponse = result.response.text().trim().split('\n')[0].substring(0, 200)
@@ -1078,21 +1288,23 @@ You:`
       timestamp: new Date().toISOString()
     })
 
-    // Send TwiML response
+    // Send TwiML response using ElevenLabs TTS if available
+    const aiResponseSpeech = await generateSpeechTwiML(aiResponse.replace(/[<>&'"]/g, ''), callId)
     res.type('text/xml')
     res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-D">${aiResponse.replace(/[<>&'"]/g, '')}</Say>
+  ${aiResponseSpeech}
   <Gather input="speech" timeout="8" speechTimeout="auto" speechModel="phone_call" language="en-US" hints="yes, no, where, what, when, help" action="${serverUrl}/api/emergency/gather-safety/${callId}" method="POST"/>
   <Redirect>${serverUrl}/api/emergency/gather-safety/${callId}?timeout=true</Redirect>
 </Response>`)
 
   } catch (error) {
     console.error('Safety gather handler error:', error)
+    const goodbyeSpeech = await generateSpeechTwiML("Thank you for your time. Goodbye.", callId)
     res.type('text/xml')
     res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-D">Thank you for your time. Goodbye.</Say>
+  ${goodbyeSpeech}
   <Hangup/>
 </Response>`)
   }
