@@ -97,7 +97,8 @@ export default function StreamPage() {
     if (phase === 'recording' && duration >= 25) {
       handleStop()
     }
-  }, [duration, phase, handleStop])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [duration, phase])
 
   useEffect(() => {
     if (phase === 'cancel-window') {
