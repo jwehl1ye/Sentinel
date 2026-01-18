@@ -76,39 +76,73 @@
   transition: opacity 0.2s ease;
 }
 
+/* Main recording banner - Alarming Red */
 .recording-overlay {
   position: absolute;
   top: 60px;
   left: 16px;
+  right: 16px;
+  /* Span full width safely */
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  background: rgba(0, 0, 0, 0.6);
+  justify-content: center;
+  /* Center content */
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(220, 38, 38, 0.95);
+  /* Strong Red */
   border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(220, 38, 38, 0.4);
   backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  z-index: 100;
+  animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-red {
+  0% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4);
+  }
+
+  70% {
+    box-shadow: 0 0 0 10px rgba(220, 38, 38, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+  }
 }
 
 .rec-indicator {
   display: flex;
   align-items: center;
-  gap: 6px;
-  color: var(--danger-primary);
+  gap: 8px;
+  color: white;
+  /* White text on red background */
   font-family: var(--font-display);
-  letter-spacing: 2px;
+  font-weight: 800;
+  /* Extra bold */
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-size: 0.9rem;
 }
 
 .rec-dot {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
+  background-color: white;
   border-radius: 50%;
-  animation: recording-pulse 1s infinite;
+  animation: blink 1s infinite;
 }
 
 .duration {
   font-family: var(--font-code);
   font-size: 1.1rem;
+  font-weight: bold;
   color: white;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 2px 8px;
+  border-radius: 4px;
 }
 
 .location-overlay {
@@ -240,9 +274,12 @@
 }
 
 @keyframes emergency-pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 4px 20px rgba(255, 23, 68, 0.5);
   }
+
   50% {
     box-shadow: 0 4px 40px rgba(255, 23, 68, 0.9);
   }
