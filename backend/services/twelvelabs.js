@@ -241,26 +241,37 @@ export const quickAnalyzeVideo = async (videoFilePath) => {
             return null
         }
 
-        if (!taskId) return null
+        if (!taskId) {
+            console.error('Upload failed, response:', uploadOut)
+            return null
+        }
         console.log('Task created:', taskId)
 
         // 2. Poll status via curl
         let videoId = null
         const startTime = Date.now()
-        const timeout = 60000
+        const timeout = 180000 // 3 minutes timeout
 
         while (Date.now() - startTime < timeout) {
             const statusCmd = `curl -s -X GET "https://api.twelvelabs.io/v1.3/tasks/${taskId}" -H "x-api-key: ${apiKey}"`
             const { stdout: statusOut } = await execAsync(statusCmd)
-            const statusData = JSON.parse(statusOut)
 
-            console.log('Task status:', statusData.status)
+            let statusData;
+            try {
+                statusData = JSON.parse(statusOut)
+            } catch (e) {
+                console.log('Poll error (retrying):', statusOut)
+                await new Promise(r => setTimeout(r, 3000))
+                continue
+            }
+
+            console.log(`Task ${taskId} status:`, statusData.status)
 
             if (statusData.status === 'ready') {
                 videoId = statusData.video_id
                 break
             } else if (statusData.status === 'failed') {
-                console.error('Task failed')
+                console.error('Task failed during processing')
                 return null
             }
             await new Promise(r => setTimeout(r, 3000))
