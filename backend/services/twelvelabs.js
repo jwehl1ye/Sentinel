@@ -25,7 +25,7 @@ const convertToMp4 = async (webmPath) => {
 
     try {
         console.log(`Converting ${webmPath} to MP4...`)
-        await execAsync(`ffmpeg -y -i "${webmPath}" -c:v libx264 -preset ultrafast -crf 28 -vf "scale='min(1280,iw)':'min(720,ih)':force_original_aspect_ratio=decrease" -c:a aac -b:a 64k "${mp4Path}"`)
+        await execAsync(`ffmpeg -y -i "${webmPath}" -c:v libx264 -preset ultrafast -crf 32 -vf "scale='min(854,iw)':'min(480,ih)':force_original_aspect_ratio=decrease" -c:a aac -b:a 32k "${mp4Path}"`)
         console.log(`Conversion complete: ${mp4Path}`)
         return mp4Path
     } catch (error) {
@@ -274,7 +274,7 @@ export const quickAnalyzeVideo = async (videoFilePath) => {
                 console.error('Task failed during processing')
                 return null
             }
-            await new Promise(r => setTimeout(r, 3000))
+            await new Promise(r => setTimeout(r, 1000))
         }
 
         if (!videoId) return null
