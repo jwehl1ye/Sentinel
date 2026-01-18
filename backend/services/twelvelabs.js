@@ -25,7 +25,7 @@ const convertToMp4 = async (webmPath) => {
 
     try {
         console.log(`Converting ${webmPath} to MP4...`)
-        await execAsync(`ffmpeg -y -i "${webmPath}" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${mp4Path}"`)
+        await execAsync(`ffmpeg -y -i "${webmPath}" -c:v libx264 -preset fast -crf 28 -vf "scale='min(1280,iw)':'min(720,ih)':force_original_aspect_ratio=decrease" -c:a aac -b:a 64k "${mp4Path}"`)
         console.log(`Conversion complete: ${mp4Path}`)
         return mp4Path
     } catch (error) {
