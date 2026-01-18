@@ -30,6 +30,12 @@ const convertToMp4 = async (webmPath) => {
         return mp4Path
     } catch (error) {
         console.error('FFmpeg conversion error:', error.message)
+        // Check if ffmpeg is even found
+        try {
+            await execAsync('which ffmpeg')
+        } catch (e) {
+            console.error('CRITICAL: ffmpeg binary NOT FOUND in path')
+        }
         return null
     }
 }
