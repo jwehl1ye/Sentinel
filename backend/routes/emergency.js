@@ -123,11 +123,14 @@ router.get('/tts/:callId/:textHash', async (req, res) => {
       const errorText = await response.text()
       console.error(`[TTS] ElevenLabs API error (${response.status}):`, errorText)
 
-      // Return empty audio with proper headers - Twilio will skip it
-      // The calling code should use Twilio Say as fallback
-      res.set('Content-Type', 'audio/mpeg')
-      res.status(200) // Return 200 so Twilio doesn't think it's an error
-      return res.send(Buffer.alloc(0))
+      // Reset permission cache so future calls use Twilio TTS
+      elevenLabsHasPermission = false
+      console.log('[TTS] Disabled ElevenLabs due to error, falling back to Twilio TTS')
+
+      // Return 503 so the calling code knows to handle the error
+      // This is better than returning empty audio which causes silent failure
+      res.status(503).send('ElevenLabs unavailable')
+      return
     }
 
     const audioBuffer = await response.arrayBuffer()
