@@ -401,12 +401,29 @@ router.get('/:id/analysis', authenticateToken, async (req, res) => {
           db.prepare('UPDATE recordings SET twelvelabs_task_id = ? WHERE id = ?').run(taskId, recording.id)
           return res.json({ status: 'indexing', message: 'Video is being analyzed. This may take a few minutes.' })
         } else {
-          // Indexing failed (likely video format/duration issue)
+          // TwelveLabs failed - try Gemini as fallback
+          console.log('[Analysis] TwelveLabs failed, trying Gemini fallback...')
+          try {
+            const { analyzeVideoWithGemini } = await import('../services/gemini.js')
+            const geminiResult = await analyzeVideoWithGemini(recording.file_path)
+            if (geminiResult) {
+              db.prepare('UPDATE recordings SET ai_events = ? WHERE id = ?').run(JSON.stringify(geminiResult), recording.id)
+              return res.json({
+                status: 'ready',
+                events: [],
+                summary: geminiResult.summary,
+                message: 'Analysis complete (Gemini)'
+              })
+            }
+          } catch (geminiErr) {
+            console.error('Gemini fallback failed:', geminiErr.message)
+          }
+
           return res.json({
             status: 'unavailable',
             events: [],
             summary: null,
-            message: 'Video format not supported for AI analysis (must be at least 4 seconds)'
+            message: 'Video too short for analysis (record at least 5 seconds)'
           })
         }
       } catch (err) {
