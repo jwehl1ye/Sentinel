@@ -42,20 +42,17 @@ const convertToMp4 = async (webmPath) => {
 
 export const indexVideo = async (filePath, recordingId) => {
     try {
-        const client = getClient()
-        if (!client) {
-            console.log('TwelveLabs key missing, skipping indexing')
-            return null
-        }
+        const apiKey = process.env.TWELVELABS_KEY
         const indexId = process.env.TWELVELABS_INDEX_ID
-        if (!indexId) {
-            console.log('TwelveLabs Index ID missing')
+
+        if (!apiKey || !indexId) {
+            console.log('TwelveLabs key or Index ID missing')
             return null
         }
 
         console.log(`Indexing video for recording ${recordingId}...`)
 
-        // Convert webm to mp4 for better compatibility with TwelveLabs
+        // Convert webm to mp4
         let videoPath = filePath
         if (filePath.endsWith('.webm')) {
             const mp4Path = await convertToMp4(filePath)
@@ -66,23 +63,34 @@ export const indexVideo = async (filePath, recordingId) => {
             }
         }
 
-        const task = await client.tasks.create({
-            indexId,
-            videoFile: fs.createReadStream(videoPath),
-            language: 'en'
+        const formData = new FormData()
+        formData.append('index_id', indexId)
+        formData.append('language', 'en')
+        // Read file into blob/buffer for FormData
+        const fileBuffer = fs.readFileSync(videoPath)
+        const blob = new Blob([fileBuffer])
+        formData.append('video_file', blob, path.basename(videoPath))
+
+        const response = await fetch('https://api.twelvelabs.io/v1.2/tasks', {
+            method: 'POST',
+            headers: {
+                'x-api-key': apiKey
+            },
+            body: formData
         })
 
-        console.log('TwelveLabs task created:', task.id)
+        if (!response.ok) {
+            const errorText = await response.text()
+            console.error('TwelveLabs API Error:', response.status, errorText)
+            return null
+        }
 
-        // Clean up converted file after upload (optional - keep for debugging)
-        // if (videoPath !== filePath && fs.existsSync(videoPath)) {
-        //     fs.unlinkSync(videoPath)
-        // }
+        const data = await response.json()
+        console.log('TwelveLabs task created (via fetch):', data._id)
 
-        return task.id
+        return data._id
     } catch (error) {
         console.error('TwelveLabs indexing error:', error.message)
-        if (error.body) console.error('Error body:', JSON.stringify(error.body, null, 2))
         return null
     }
 }
