@@ -64,7 +64,7 @@ export const indexVideo = async (filePath, recordingId) => {
         }
 
         // Use curl to upload (bypasses Node 20 fetch + FormData bug)
-        const curlCmd = `curl -s -X POST "https://api.twelvelabs.io/v1.2/tasks" \\
+        const curlCmd = `curl -s -X POST "https://api.twelvelabs.io/v1.3/tasks" \\
             -H "x-api-key: ${apiKey}" \\
             -H "Content-Type: multipart/form-data" \\
             -F "index_id=${indexId}" \\
