@@ -81,3 +81,107 @@ Provide a helpful, concise answer based on the video analysis. If the question c
 export const isConfigured = () => {
   return !!process.env.GEMINI_API_KEY
 }
+
+// Fast video analysis using Gemini Vision (2-3 seconds vs 30-60s for TwelveLabs)
+export const analyzeVideoWithGemini = async (videoFilePath) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY
+    if (!apiKey) {
+      console.log('Gemini API key not configured')
+      return null
+    }
+
+    const { exec } = await import('child_process')
+    const { promisify } = await import('util')
+    const fs = await import('fs')
+    const path = await import('path')
+    const execAsync = promisify(exec)
+
+    // Extract 3 frames from video (beginning, middle, end)
+    const tempDir = path.dirname(videoFilePath)
+    const frameBase = path.join(tempDir, `frame_${Date.now()}`)
+
+    try {
+      // Get video duration first
+      const { stdout: durationOutput } = await execAsync(
+        `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${videoFilePath}"`,
+        { timeout: 10000 }
+      )
+      const duration = parseFloat(durationOutput.trim()) || 10
+
+      // Extract 3 key frames
+      const timestamps = [1, Math.floor(duration / 2), Math.max(1, Math.floor(duration - 1))]
+      const frames = []
+
+      for (let i = 0; i < timestamps.length; i++) {
+        const framePath = `${frameBase}_${i}.jpg`
+        try {
+          await execAsync(
+            `ffmpeg -y -ss ${timestamps[i]} -i "${videoFilePath}" -vframes 1 -q:v 2 "${framePath}"`,
+            { timeout: 15000 }
+          )
+          if (fs.existsSync(framePath)) {
+            const frameData = fs.readFileSync(framePath)
+            frames.push(frameData.toString('base64'))
+            fs.unlinkSync(framePath) // Clean up
+          }
+        } catch (e) {
+          console.log(`Frame extraction at ${timestamps[i]}s failed:`, e.message.substring(0, 50))
+        }
+      }
+
+      if (frames.length === 0) {
+        console.error('No frames extracted from video')
+        return null
+      }
+
+      // Analyze frames with Gemini Vision
+      const genAI = new GoogleGenerativeAI(apiKey)
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-2.0-flash-exp',
+        generationConfig: {
+          maxOutputTokens: 500,
+          temperature: 0.2
+        }
+      })
+
+      const imageParts = frames.map(frameData => ({
+        inlineData: {
+          mimeType: 'image/jpeg',
+          data: frameData
+        }
+      }))
+
+      const result = await model.generateContent([
+        {
+          text: `Analyze these ${frames.length} frames from a safety recording. Provide a detailed safety analysis:
+
+1. **Scene Description**: What is happening in the video?
+2. **People Present**: How many people, what are they doing?
+3. **Safety Concerns**: Any weapons, aggressive behavior, threats, accidents, or dangerous situations?
+4. **Risk Level**: LOW, MEDIUM, HIGH, or CRITICAL
+5. **Key Details**: Any important observations (license plates, faces, objects, locations)?
+
+Be thorough but concise. This is for safety documentation purposes.`
+        },
+        ...imageParts
+      ])
+
+      const analysis = result.response.text()
+      console.log('[Gemini Video Analysis] Complete:', analysis.substring(0, 100))
+
+      return {
+        summary: analysis,
+        analyzedAt: new Date().toISOString(),
+        framesAnalyzed: frames.length,
+        method: 'gemini-vision'
+      }
+    } catch (ffmpegError) {
+      console.error('FFmpeg/Analysis error:', ffmpegError.message)
+      return null
+    }
+  } catch (error) {
+    console.error('Gemini video analysis error:', error.message)
+    return null
+  }
+}

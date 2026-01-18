@@ -99,15 +99,17 @@ router.post('/upload', authenticateToken, upload.single('video'), (req, res) => 
       db.prepare('UPDATE stream_sessions SET recording_id = ? WHERE id = ?').run(recordingId, stream_id)
     }
 
-    // Trigger TwelveLabs Indexing (Async)
-    import('../services/twelvelabs.js').then(async ({ indexVideo }) => {
+    // Trigger Fast Gemini Video Analysis (Async) - 2-3 seconds instead of 30-60s
+    import('../services/gemini.js').then(async ({ analyzeVideoWithGemini }) => {
       try {
-        const taskId = await indexVideo(req.file.path, recordingId)
-        if (taskId) {
-          db.prepare('UPDATE recordings SET twelvelabs_task_id = ? WHERE id = ?').run(taskId, recordingId)
+        console.log(`[Recording ${recordingId}] Starting Gemini video analysis...`)
+        const analysis = await analyzeVideoWithGemini(req.file.path)
+        if (analysis) {
+          db.prepare('UPDATE recordings SET ai_events = ? WHERE id = ?').run(JSON.stringify(analysis), recordingId)
+          console.log(`[Recording ${recordingId}] Gemini analysis complete!`)
         }
       } catch (err) {
-        console.error('Async indexing failed:', err)
+        console.error('Async Gemini analysis failed:', err)
       }
     })
 
