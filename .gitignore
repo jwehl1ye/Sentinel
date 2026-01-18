@@ -102,11 +102,5 @@ htmlcov/
 *.sqlite
 *.sqlite3
 *.db
-<<<<<<< HEAD
-*.db-shm
-*.db-wal
-
 # Uploads
-=======
->>>>>>> 7b51277 (feat: UI Polish & AI Restoration)
 backend/uploads/
