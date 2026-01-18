@@ -143,7 +143,7 @@ export const searchVideo = async (indexId, query) => {
         const results = await client.search.query({
             indexId,
             queryText: query,
-            searchOptions: ['visual', 'conversation']
+            searchOptions: ['visual']
         })
 
         // Map SDK results to our expected format (array of { start, end, score })
