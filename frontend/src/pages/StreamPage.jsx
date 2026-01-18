@@ -92,6 +92,13 @@ export default function StreamPage() {
     }
   }, [phase])
 
+  // Limit recording to 25 seconds
+  useEffect(() => {
+    if (phase === 'recording' && duration >= 25) {
+      handleStop()
+    }
+  }, [duration, phase, handleStop])
+
   useEffect(() => {
     if (phase === 'cancel-window') {
       const cancelSeconds = settings?.cancel_window_seconds || 30
