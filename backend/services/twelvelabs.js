@@ -137,22 +137,35 @@ export const getTaskStatus = async (taskId) => {
 
 export const searchVideo = async (indexId, query) => {
     try {
-        const client = getClient()
-        if (!client) return null
+        const apiKey = process.env.TWELVELABS_KEY
+        if (!apiKey) return null
 
-        const results = await client.search.query({
-            indexId,
-            queryText: query,
-            searchOptions: ['visual']
-        })
+        const curlCmd = `curl -s -X POST "https://api.twelvelabs.io/v1.3/search" \\
+            -H "x-api-key: ${apiKey}" \\
+            -H "Content-Type: application/json" \\
+            -d '{"index_id": "${indexId}", "query_text": "${query.replace(/'/g, "\\'")}", "search_options": ["visual"]}'`
 
-        // Map SDK results to our expected format (array of { start, end, score })
-        return {
-            data: (results.data || []).map(item => ({
-                start: item.start,
-                end: item.end,
-                score: item.score
-            }))
+        const { stdout, stderr } = await execAsync(curlCmd)
+
+        if (stderr) {
+            console.error('Curl search stderr:', stderr)
+        }
+
+        try {
+            const results = JSON.parse(stdout)
+            if (results.data) {
+                return {
+                    data: results.data.map(item => ({
+                        start: item.start,
+                        end: item.end,
+                        score: item.score
+                    }))
+                }
+            }
+            return { data: [] }
+        } catch (parseErr) {
+            console.error('Failed to parse TwelveLabs search response:', stdout)
+            return null
         }
     } catch (error) {
         console.error('TwelveLabs search error:', error.message)
@@ -162,16 +175,29 @@ export const searchVideo = async (indexId, query) => {
 
 export const generateSummary = async (videoId) => {
     try {
-        const client = getClient()
-        if (!client) return null
+        const apiKey = process.env.TWELVELABS_KEY
+        if (!apiKey) return null
 
-        const result = await client.summarize({
-            videoId,
-            type: 'summary',
-            prompt: "Generate a detailed description of what is happening in this video, focusing on any threats, weapons, or aggressive behavior. Provide a chronological summary."
-        })
+        const prompt = "Generate a detailed description of what is happening in this video, focusing on any threats, weapons, or aggressive behavior. Provide a chronological summary."
 
-        return { summary: result.summary || result.data }
+        const curlCmd = `curl -s -X POST "https://api.twelvelabs.io/v1.3/summarize" \\
+            -H "x-api-key: ${apiKey}" \\
+            -H "Content-Type: application/json" \\
+            -d '{"video_id": "${videoId}", "type": "summary", "prompt": "${prompt.replace(/"/g, '\\"')}"}'`
+
+        const { stdout, stderr } = await execAsync(curlCmd)
+
+        if (stderr) {
+            console.error('Curl summarize stderr:', stderr)
+        }
+
+        try {
+            const result = JSON.parse(stdout)
+            return { summary: result.summary || result.data }
+        } catch (parseErr) {
+            console.error('Failed to parse TwelveLabs summarize response:', stdout)
+            return null
+        }
     } catch (error) {
         console.error('TwelveLabs generate error:', error.message)
         return null
