@@ -63,32 +63,36 @@ export const indexVideo = async (filePath, recordingId) => {
             }
         }
 
-        const formData = new FormData()
-        formData.append('index_id', indexId)
-        formData.append('language', 'en')
-        // Read file into blob/buffer for FormData
-        const fileBuffer = fs.readFileSync(videoPath)
-        const blob = new Blob([fileBuffer])
-        formData.append('video_file', blob, path.basename(videoPath))
+        // Use curl to upload (bypasses Node 20 fetch + FormData bug)
+        const curlCmd = `curl -s -X POST "https://api.twelvelabs.io/v1.2/tasks" \\
+            -H "x-api-key: ${apiKey}" \\
+            -H "Content-Type: multipart/form-data" \\
+            -F "index_id=${indexId}" \\
+            -F "language=en" \\
+            -F "video_file=@${videoPath}"`
 
-        const response = await fetch('https://api.twelvelabs.io/v1.2/tasks', {
-            method: 'POST',
-            headers: {
-                'x-api-key': apiKey
-            },
-            body: formData
-        })
+        console.log('Uploading via curl...')
+        const { stdout, stderr } = await execAsync(curlCmd, { maxBuffer: 50 * 1024 * 1024 })
 
-        if (!response.ok) {
-            const errorText = await response.text()
-            console.error('TwelveLabs API Error:', response.status, errorText)
+        if (stderr) {
+            console.error('Curl stderr:', stderr)
+        }
+
+        try {
+            const data = JSON.parse(stdout)
+            if (data._id) {
+                console.log('TwelveLabs task created (via curl):', data._id)
+                return data._id
+            } else if (data.message) {
+                console.error('TwelveLabs API Error:', data.message)
+                return null
+            }
+        } catch (parseErr) {
+            console.error('Failed to parse TwelveLabs response:', stdout)
             return null
         }
 
-        const data = await response.json()
-        console.log('TwelveLabs task created (via fetch):', data._id)
-
-        return data._id
+        return null
     } catch (error) {
         console.error('TwelveLabs indexing error:', error.message)
         return null
